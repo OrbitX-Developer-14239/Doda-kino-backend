@@ -7,8 +7,8 @@ export const validate = (schema) =>
                 params: req.params
             });
             req.body = validated.body;
-            req.query = validated.query;
-            req.params = validated.params;
+            if (validated.query) Object.assign(req.query, validated.query);
+            if (validated.params) Object.assign(req.params, validated.params);
             next()
         } catch (error) {
             if (error.name === 'ZodError') {
