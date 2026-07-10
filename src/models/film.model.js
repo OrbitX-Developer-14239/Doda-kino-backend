@@ -9,7 +9,7 @@ const FilmSchema = new Schema({
     genres: [{ type: String, required: true }],
 
     code: { type: Number, required: true, unique: true, index: true },
-    posterId: { type: String, required: true },
+    posterId: { type: String },
 
     episodes: [{
         _id: false,

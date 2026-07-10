@@ -121,6 +121,7 @@ export class AIService {
 QOIDALAR:
 - Foydalanuvchi filmni izohlaydi. Sening vazifang mos keluvchi barcha kino nomlarini topish.
 - Natijani FAQAT vergul (,) bilan ajratilgan toza nomlar shaklida yoz. Masalan: Titanik, Qochish rejasi, Avatar
+- Agar izohda biron filmning 
 - DIQQAT: Hech qanday qo'shtirnoq, yulduzcha (*), qavslar, raqamlash yoki qator tashlash ishlatma!
 - DIQQAT: Hech qanday salomlashish yoki izoh ("Mana", "Ular" kabi) yozma! Mantiqan xato qilsang tizim portlaydi.
 - Agar umuman topa olmasang, aynan "Film topilmadi" deb yoz.`;

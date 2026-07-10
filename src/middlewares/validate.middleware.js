@@ -14,7 +14,7 @@ export const validate = (schema) =>
             if (error.name === 'ZodError') {
                 return res.status(400).json({
                     success: false,
-                    message: "Ma'lumotlarni to'ldirishda xatolik. Xayrulla body ni to'g'ri yozsangchi!!!",
+                    message: "Ma'lumotlarni to'ldirishda xatolik",
                     errors: error.issues.map(e => ({
                         field: e.path.join("."),
                         message: e.message

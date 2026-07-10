@@ -5,7 +5,9 @@ import { catchAsync } from "../utils/catchAsync.js";
 export const FilmController = {
     createFilm: catchAsync(async (req, res) => {
         const body = req.body
-        const data = await FilmService.createFilm(body)
+
+        const posterLocalPath = req.file?.path;
+        const data = await FilmService.createFilm(body, posterLocalPath)
 
         res.status(201).json({ success: true, data })
     }),
