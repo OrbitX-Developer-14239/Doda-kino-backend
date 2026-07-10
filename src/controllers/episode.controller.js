@@ -12,7 +12,7 @@ export const EpisodeController = {
         }
 
         const videoLocalPath = req.file.path;
-        const caption = body.caption || `${body.name || 'Yangi qism'} - Doda Kino orqali yuklandi! #anime #dodakino`;
+        const caption = body.caption || `${body.caption || 'Yangi qism'} #film #dodakino`;
 
         const data = await EpisodeService.createEpisode(body, videoLocalPath, caption);
 

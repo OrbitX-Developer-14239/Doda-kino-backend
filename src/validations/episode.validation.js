@@ -20,6 +20,7 @@ export const EpisodeValidation = z.object({
         description: z.string().trim().min(10, "Kengroq ta'rif bering").optional().or(z.string().max(0)),
         releaseYear: z.coerce.number().int().min(1800).max(new Date().getFullYear()).optional(),
         country: z.string().trim().min(2).optional(),
+        caption: z.string().optional(),
         genres: z.preprocess(val => {
             if (typeof val === 'string') {
                 try { const parsed = JSON.parse(val); if (Array.isArray(parsed)) return parsed; } catch (e) { }
