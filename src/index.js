@@ -22,10 +22,6 @@ app.use("/api/channel", channelRouter)
 app.use("/api/bot", botRouter)
 app.use("/api/user", userRouter)
 app.use("/api/admin", adminRouter)
-app.use("/", (req, res) => {
-    res.send("Server is running")
-})
-
 
 app.use((err, req, res, next) => {
     console.error("GLOBAL ERROR 🔥:", err.stack)
