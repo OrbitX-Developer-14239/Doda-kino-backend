@@ -1,0 +1,18 @@
+import "dotenv/config"
+
+export const CONFIG = {
+    PORT: process.env.PORT || 5000,
+    GROQ_API_KEY: process.env.GROQ_API_KEY,
+    MONGO_URI: process.env.MONGO_URI,
+    ITEMS_PER_PAGE: 12,
+    INSTAGRAM_ID: process.env.INSTAGRAM_ID,
+    INSTAGRAM_TEMP_ACCESS_TOKEN: process.env.INSTAGRAM_TEMP_ACCESS_TOKEN,
+    META_APP_ID: process.env.META_APP_ID,
+    META_APP_SECRET: process.env.META_APP_SECRET,
+    INSTAGRAM_ACCESS_TOKEN: process.env.INSTAGRAM_ACCESS_TOKEN,
+    SERVER_URL:process.env.SERVER_URL
+}
+
+if (!CONFIG.MONGO_URI) {
+    throw new Error("CRITICAL: MONG_URI is missing in environment variables!");
+}
