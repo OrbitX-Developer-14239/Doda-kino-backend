@@ -4,6 +4,7 @@ export const filmValidation = z.object({
     body: z.object({
         code: z.coerce.number().int().min(50000, "Kodingiz 50000 dan kichik bo'lishi mumkin emas"),
         name: z.string().trim().min(1, "Film nomi kamida 1ta harfdan iborat bo'lishi kerak"),
+        originalName: z.string().trim().min(1, "Film original nomi kamida 1ta harfdan iborat bo'lishi kerak"),
         year: z.coerce.number().int().min(1800, "Xato yil").max(new Date().getFullYear(), "Kelajakdagi yil kiritib bo'lmaydi"),
         country: z.string().trim().min(2, "Davlat kiritilishi shart"),
         genres: z.preprocess(val => {

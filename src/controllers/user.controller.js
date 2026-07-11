@@ -5,7 +5,6 @@ export const userController = {
     createUser: catchAsync(async (req, res) => {
         const body = req.body
         const data = await UserService.createUser(body)
-        console.log(req.body, "req.body");
 
         res.status(201).json({ success: true, data })
     }),

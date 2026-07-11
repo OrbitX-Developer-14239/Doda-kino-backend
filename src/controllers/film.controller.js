@@ -28,7 +28,6 @@ export const FilmController = {
     searchByAi: catchAsync(async (req, res) => {
         const { query } = req.body
         const result = await AIService.askAI(query)
-        console.log(query, "query");
 
         res.status(200).json({ success: true, data: result })
     }),

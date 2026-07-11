@@ -70,7 +70,7 @@ export const FilmService = {
         const totalPages = Math.ceil(totalFilms / limit);
 
         const films = await FilmModel.find()
-            .select("name year code")
+            .select("name originalName year code")
             .skip(skip)
             .limit(limit)
             .sort({ createdAt: -1 });
@@ -92,6 +92,6 @@ export const FilmService = {
     async searchByName(name) {
         const safeName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const regex = new RegExp(safeName, "i");
-        return await FilmModel.find({ name: regex }).select("name id code year");
+        return await FilmModel.find({ originalName: regex }).select("name originalName id code year");
     }
 };

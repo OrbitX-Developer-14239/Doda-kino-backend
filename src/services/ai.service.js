@@ -17,9 +17,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const PERSIST_DIR = path.resolve(__dirname, "../storage");
 
-// 1. Embedding modelni sozlaymiz
 const embeddingModel = new HuggingFaceEmbedding({
-    modelType: "Xenova/all-MiniLM-L6-v2"
+    modelType: "Xenova/paraphrase-multilingual-MiniLM-L12-v2"
 });
 Settings.embedModel = embeddingModel;
 
@@ -41,7 +40,7 @@ export class AIService {
                 console.log("🤖 [AI]: Tayyor film vektorlari fayldan yuklanmoqda...");
                 const storageContext = await storageContextFromDefaults({ persistDir: PERSIST_DIR });
                 this.index = await VectorStoreIndex.init({ storageContext });
-                this.retriever = this.index.asRetriever({ similarityTopK: 3 });
+                this.retriever = this.index.asRetriever({ similarityTopK: 5 });
             } else {
                 console.log("🤖 [AI]: Yangi film indeksi hisoblanmoqda...");
 
@@ -58,14 +57,14 @@ export class AIService {
 
                 const documents = [];
                 for (const film of filmArray) {
-                    const textContent = film.name; // Faqat NOMINI o'qiydi va saqlaydi!
+                    const textContent = film.originalName;
 
                     const embedding = await embeddingModel.getTextEmbedding(textContent);
 
                     const doc = new Document({
                         text: textContent,
                         id_: `film_${film._id}`,
-                        metadata: { id: film._id.toString(), name: film.name }
+                        metadata: { id: film._id.toString(), name: film.name, originalName: film.originalName }
                     });
 
                     doc.embedding = embedding;
@@ -88,7 +87,6 @@ export class AIService {
         }
     }
 
-    // 🔥 ALOHIDA FUNKSIYA: MUVAFFAQIYATLI QO'SHILGANDAN KEYIN AYTILADIGAN
     static async addFilmToIndex(film) {
         if (!this.index) {
             console.log("🤖 [AI]: Indeks yo'q ekan. Film saqlandi, keyingi restartda indekslanadi.");
@@ -96,14 +94,14 @@ export class AIService {
         }
 
         try {
-            console.log(`🤖 [AI]: Yangi kino indeks fayliga ulanmoqda -> "${film.name}"...`);
-            const textContent = film.name; // Faqat Nomi 
+            console.log(`🤖 [AI]: Yangi kino indeks fayliga ulanmoqda -> "${film.originalName}"...`);
+            const textContent = film.originalName; // Faqat Nomi 
             const embedding = await embeddingModel.getTextEmbedding(textContent);
 
             const doc = new Document({
                 text: textContent,
                 id_: `film_${film._id}`,
-                metadata: { id: film._id.toString(), name: film.name }
+                metadata: { id: film._id.toString(), name: film.name, originalName: film.originalName }
             });
             doc.embedding = embedding;
 
@@ -116,23 +114,24 @@ export class AIService {
 
     static async askAI(userMessage) {
         try {
-            // 1. QADAM: Eng birinchi bo'lib User yozgan matnni to'g'ridan-to'g'ri AI (Groq) ga uzatamiz.
             const systemPrompt = `Sen yordamchi emassan, sen toza Data filter qiluvchi scriptsan.
 QOIDALAR:
 - Foydalanuvchi filmni izohlaydi. Sening vazifang mos keluvchi barcha kino nomlarini topish.
-- Natijani FAQAT vergul (,) bilan ajratilgan toza nomlar shaklida yoz. Masalan: Titanik, Qochish rejasi, Avatar
+- Natijani FAQAT vergul (,) bilan ajratilgan xalqaro inglizcha nomlar shaklida yoz. Masalan: The Matrix, Inception, Avengers, Avatar
+- Nomlarni faqatgina ingliz tilida yoz
 - Har doim kamida eng mos keladigan 10ta filmni qaytar
+- Hech qachon episode nomlarini yozma faqat asosiy kino nomlarini yoz
 - DIQQAT: Hech qanday qo'shtirnoq, yulduzcha (*), qavslar, raqamlash yoki qator tashlash ishlatma!
 - DIQQAT: Hech qanday salomlashish yoki izoh ("Mana", "Ular" kabi) yozma! Mantiqan xato qilsang tizim portlaydi.
 - Agar umuman topa olmasang, aynan "Film topilmadi" deb yoz.`;
 
             const groqResponse = await groq.chat.completions.create({
-                model: "llama-3.3-70b-versatile", 
+                model: "openai/gpt-oss-120b",
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userMessage }
                 ],
-                max_tokens: 150,
+                max_tokens: 1000,
                 temperature: 0.1,
             });
 
@@ -142,13 +141,10 @@ QOIDALAR:
                 return [];
             }
 
-            console.log(`🤖 [AI]: Groq topgan ehtimoliy kinolar ro'yxati: "${predictedText}"`);
+            console.log(`🤖 [AI]: Ai topgan variantlar: ${predictedText}`);
 
-            // Vergul bilan ajratilgan kinolarni alohida massivga ajaratamiz (split)
             const predictedNames = predictedText.split(",").map(n => n.trim()).filter(Boolean);
 
-            // 🔥 Yaxshilanma: Ba'zan Groq qismlarini yozadi ("Qasoskorlar: Intiho") ammo DB da Asosiy ("Qasoskorlar") saqlangan.
-            // Shuning uchun ": " va "-" belgilaridan oldingi Asosiy So'zlarni ham qidiruv jarayoniga qo'shamiz!
             const allTermsToSearch = new Set();
             for (const name of predictedNames) {
                 allTermsToSearch.add(name);
@@ -160,13 +156,11 @@ QOIDALAR:
                 }
             }
 
-            const foundFilms = []; // Qaytariladigan oxirgi Array
-            const foundIds = new Set(); // Turli nomlar bitta kinoni chaqirib qolsa dublikat bolmasligi uchun!
+            const foundFilms = [];
+            const foundIds = new Set();
 
-            // 2. QADAM: Har bir ehtimoliy kino nomi orqali LlamaIndex va Bazamizdan izlab yig'amiz!
+
             for (const pName of allTermsToSearch) {
-
-                // a) DB dan izlab ko'ramiz
                 const dbResults = await FilmService.searchByName(pName);
 
                 if (dbResults && dbResults.length > 0) {
@@ -175,33 +169,36 @@ QOIDALAR:
                         if (!foundIds.has(filmIdStr)) {
                             foundFilms.push({
                                 name: film.name,
+                                originalName: film.originalName,
                                 id: filmIdStr,
                                 year: film.year,
                                 code: film.code
                             });
-                            foundIds.add(filmIdStr); // uni saqlandilar ro'yxatiga qo'shamiz
+                            foundIds.add(filmIdStr);
                         }
                     });
                 }
-
-                // b) LlamaIndex Vektor qidiruvidan ham so'rab olamiz (Agar Db dan topilsa ham ehtimoliy boshqalari ham chiqishi uchun)
                 if (this.retriever) {
                     try {
                         const nodes = await this.retriever.retrieve({ query: pName });
                         if (nodes && nodes.length > 0) {
-                            nodes.forEach(n => {
+                            for (const n of nodes) {
+                                console.log(`Score: ${n.score} - ${n.node.metadata.name}`);
                                 const mId = n.node.metadata.id;
-                                // O'xshashlik 60% dan pastlarini va allaqachon DB dan topib qo'shilganlarini olmaymiz!
-                                if (n.score >= 0.6 && !foundIds.has(mId)) {
-                                    foundFilms.push({
-                                        name: n.node.metadata.name,
-                                        id: mId,
-                                        year: null,
-                                        code: null
-                                    });
-                                    foundIds.add(mId);
+                                if (n.score >= 0.5 && !foundIds.has(mId)) {
+                                    const dbFilm = await FilmModel.findById(mId);
+                                    if (dbFilm) {
+                                        foundFilms.push({
+                                            name: dbFilm.name,
+                                            originalName: dbFilm.originalName,
+                                            id: mId,
+                                            year: dbFilm.year,
+                                            code: dbFilm.code
+                                        });
+                                        foundIds.add(mId);
+                                    }
                                 }
-                            });
+                            }
                         }
                     } catch (e) {
                         console.error("🤖 [AI]: LlamaIndex xatosi:", e.message);
@@ -211,12 +208,12 @@ QOIDALAR:
                 }
             }
 
-            // 3. QADAM: Barcha mos kelgan kinolar yig'indisini Toza Array qilib qaytaramiz
+            console.log("Yekuniy topilgan filmlar:", foundFilms);
             return foundFilms;
 
         } catch (error) {
             console.error("🤖 [AI]: AI bilan bog'lanishda xato:", error);
-            return []; // Xatolik bo'lsa ham bo'sh array qaytsin (Frontend xatoga uchramasligi uchun)
+            return [];
         }
     }
 }

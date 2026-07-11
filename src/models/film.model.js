@@ -2,6 +2,7 @@ import { Schema, model } from "mongoose";
 
 const FilmSchema = new Schema({
     name: { type: String, required: true, index: 'text' },
+    originalName: { type: String, required: true, index: 'text' },
     description: { type: String, required: true },
     episodesCount: { type: Number, required: true },
     year: { type: Number, required: true },
@@ -17,6 +18,7 @@ const FilmSchema = new Schema({
         episodeNumber: { type: Number, required: true },
         code: { type: Number, required: true },
         name: { type: String, required: true },
+        originalName: { type: String, required: true },
         description: { type: String },
         releaseYear: { type: Number },
         country: { type: String },
