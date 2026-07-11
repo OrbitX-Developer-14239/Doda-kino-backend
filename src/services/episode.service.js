@@ -27,19 +27,21 @@ export const EpisodeService = {
         let instagramPostId;
         let instagramUrl;
 
-        try {
-            const formattedPath = videoLocalPath.replace(/\\/g, '/');
-            const publicVideoUrl = `${CONFIG.SERVER_URL || 'https://loyiha-nomi.onrender.com'}/${formattedPath}`;
-            console.log(`🎬 1. Epizod uchun Reels yuklash boshlandi: ${publicVideoUrl}`);
+        if (videoLocalPath) {
+            try {
+                const formattedPath = videoLocalPath.replace(/\\/g, '/');
+                const publicVideoUrl = `${CONFIG.SERVER_URL || 'https://loyiha-nomi.onrender.com'}/${formattedPath}`;
+                console.log(`🎬 1. Epizod uchun Reels yuklash boshlandi: ${publicVideoUrl}`);
 
-            const instagramService = new InstagramService();
-            instagramPostId = await instagramService.uploadReels(publicVideoUrl, caption);
-            instagramUrl = `https://www.instagram.com/p/${instagramPostId}`;
+                const instagramService = new InstagramService();
+                instagramPostId = await instagramService.uploadReels(publicVideoUrl, caption);
+                instagramUrl = `https://www.instagram.com/p/${instagramPostId}`;
 
-            console.log(`✅ 2. Reels yuklandi. Post ID: ${instagramPostId}. Endi epizod bazaga yozilmoqda...`);
-        } catch (instagramError) {
-            if (videoLocalPath) await fs.unlink(videoLocalPath).catch(() => { });
-            throw instagramError;
+                console.log(`✅ 2. Reels yuklandi. Post ID: ${instagramPostId}. Endi epizod bazaga yozilmoqda...`);
+            } catch (instagramError) {
+                await fs.unlink(videoLocalPath).catch(() => { });
+                throw instagramError;
+            }
         }
 
         const episodeData = {
@@ -70,7 +72,9 @@ export const EpisodeService = {
 
         await film.save();
 
-        await fs.unlink(videoLocalPath).catch((err) => console.error("⚠️ Vaqtinchalik faylni o'chirishda xato:", err.message));
+        if (videoLocalPath) {
+            await fs.unlink(videoLocalPath).catch((err) => console.error("⚠️ Vaqtinchalik faylni o'chirishda xato:", err.message));
+        }
 
         return episode;
     },

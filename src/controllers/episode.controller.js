@@ -5,13 +5,7 @@ export const EpisodeController = {
     createEpisode: catchAsync(async (req, res, next) => {
         const body = req.body;
 
-        if (!req.file) {
-            const error = new Error("Instagram uchun video fayl (instagramVideo) majburiy!");
-            error.status = 400;
-            return next(error);
-        }
-
-        const videoLocalPath = req.file.path;
+        const videoLocalPath = req.file?.path;
         const caption = body.caption || `${body.caption || 'Yangi qism'} #film #dodakino`;
 
         const data = await EpisodeService.createEpisode(body, videoLocalPath, caption);
