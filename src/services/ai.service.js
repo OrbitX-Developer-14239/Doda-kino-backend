@@ -119,6 +119,7 @@ QOIDALAR:
 - Foydalanuvchi filmni izohlaydi. Sening vazifang mos keluvchi barcha kino nomlarini topish.
 - Natijani FAQAT vergul (,) bilan ajratilgan xalqaro inglizcha nomlar shaklida yoz. Masalan: The Matrix, Inception, Avengers, Avatar
 - Nomlarni faqatgina ingliz tilida yoz
+- Agar foydalanuvchi film nomini yozsa o'sha nomni vergul bilan ajratib ingliz va o'zbek tilida yoz. Masalan: user: "qasoskorlar" -> "Qasoskorlar, Avengers"
 - Har doim kamida eng mos keladigan 10ta filmni qaytar
 - Hech qachon episode nomlarini yozma faqat asosiy kino nomlarini yoz
 - DIQQAT: Hech qanday qo'shtirnoq, yulduzcha (*), qavslar, raqamlash yoki qator tashlash ishlatma!
@@ -146,6 +147,7 @@ QOIDALAR:
             const predictedNames = predictedText.split(",").map(n => n.trim()).filter(Boolean);
 
             const allTermsToSearch = new Set();
+            allTermsToSearch.add(userMessage);
             for (const name of predictedNames) {
                 allTermsToSearch.add(name);
                 if (name.includes(":")) {

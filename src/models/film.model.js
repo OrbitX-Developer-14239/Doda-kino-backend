@@ -18,7 +18,6 @@ const FilmSchema = new Schema({
         episodeNumber: { type: Number, required: true },
         code: { type: Number, required: true },
         name: { type: String, required: true },
-        originalName: { type: String, required: true },
         description: { type: String },
         releaseYear: { type: Number },
         country: { type: String },

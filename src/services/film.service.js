@@ -92,6 +92,8 @@ export const FilmService = {
     async searchByName(name) {
         const safeName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const regex = new RegExp(safeName, "i");
-        return await FilmModel.find({ originalName: regex }).select("name originalName id code year");
+        return await FilmModel.find({
+            $or: [{ name: regex }, { originalName: regex }]
+        }).select("name originalName id code year");
     }
 };
