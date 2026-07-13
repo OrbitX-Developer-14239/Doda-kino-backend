@@ -18,5 +18,6 @@ router.put("/:id", authMiddleware(["superadmin", "admin"]), validate(adminUpdate
 router.delete("/:id", authMiddleware(["superadmin"]), AdminController.deleteAdmin);
 router.post("/refresh", AdminController.refresh);
 router.post("/logout", authMiddleware(), AdminController.logout);
+router.get("/all", authMiddleware(["superadmin"]), AdminController.getAllAdmins);
 
 export default router;

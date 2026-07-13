@@ -111,5 +111,10 @@ export const AdminController = {
         res.clearCookie('refreshToken');
         const data = await AdminService.logout(req.admin._id);
         res.status(200).json({ success: true, data });
+    }),
+
+    getAllAdmins: catchAsync(async (req, res) => {
+        const data = await AdminService.getAllAdmins();
+        res.status(200).json({ success: true, data });
     })
 }

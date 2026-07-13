@@ -363,5 +363,10 @@ export const AdminService = {
 
         await targetAdmin.deleteOne();
         return { message: "Admin tizimdan umrbod o'chirib yuborildi." };
+    },
+
+    async getAllAdmins() {
+        const admins = await AdminModel.find();
+        return admins;
     }
 }
