@@ -35,6 +35,14 @@ const fileFilter = (req, file, cb) => {
             error.status = 400;
             cb(error, false);
         }
+    } else if (file.fieldname === 'media') {
+        if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+            cb(null, true);
+        } else {
+            const error = new Error("Hikoya uchun faqat rasm yoki video fayl yuklash mumkin!");
+            error.status = 400;
+            cb(error, false);
+        }
     } else {
         const error = new Error("Noto'g'ri fayl maydoni (Fieldname)!");
         error.status = 400;

@@ -19,9 +19,35 @@ export const UserService = {
         return data
     },
 
-    async getUsers() {
-        const users = await UserModel.find()
+    async getUsers(queryParams) {
+        const { page = 1, limit = 50, is_subscribed } = queryParams;
 
-        return users
+        let filter = {};
+
+        if (is_subscribed === 'true') {
+            filter.channels_condition = { $exists: true, $not: { $size: 0 } };
+        } else if (is_subscribed === 'false') {
+            filter.$or = [
+                { channels_condition: { $exists: false } },
+                { channels_condition: { $size: 0 } }
+            ];
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const users = await UserModel.find(filter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(parseInt(limit));
+
+        const totalDocs = await UserModel.countDocuments(filter);
+
+        return {
+            users,
+            totalDocs,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(totalDocs / parseInt(limit))
+        };
     }
 }

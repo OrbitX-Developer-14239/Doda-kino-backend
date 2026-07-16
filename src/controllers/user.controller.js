@@ -18,7 +18,7 @@ export const userController = {
     }),
 
     getUsers: catchAsync(async (req, res) => {
-        const data = await UserService.getUsers()
+        const data = await UserService.getUsers(req.query)
 
         res.status(200).json({ success: true, data })
     })
