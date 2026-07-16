@@ -11,11 +11,6 @@ export const InstagramController = {
         res.status(200).json({ success: true, data });
     }),
 
-    updateProfile: catchAsync(async (req, res) => {
-        const data = await instagramService.updateProfile(req.body);
-        res.status(200).json(data);
-    }),
-
     getProfileGrowth: catchAsync(async (req, res) => {
         const data = await instagramService.getProfileInsights();
         res.status(200).json({ success: true, data });
@@ -57,11 +52,5 @@ export const InstagramController = {
             fs.unlink(req.file.path, () => { });
             throw error;
         }
-    }),
-
-    deleteStory: catchAsync(async (req, res) => {
-        const { id } = req.params;
-        const data = await instagramService.deleteStory(id);
-        res.status(200).json(data);
     })
 };

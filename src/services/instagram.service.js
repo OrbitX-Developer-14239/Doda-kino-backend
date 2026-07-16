@@ -32,17 +32,6 @@ export class InstagramService {
   }
 
   /**
-   * Profil ma'lumotlarini tahrirlash
-   * (Diqqat: Meta Graph API rasmiy ravishda bio/profile pic update qilishga ruxsat bermaydi. Shuning uchun bu faqat Local yoki Dummy tarzda qaytariladi yo'lda ulab ketamiz)
-   */
-  async updateProfile(data) {
-    // Meta API bo'lmagani uchun "Success" mock qilamiz
-    // Agar rasmiy Meta ruxsat bersa quyidagi qator ishlaydi:
-    // await this.api.post(`/${this.businessAccountId}`, data);
-    return { success: true, message: "Profil ma'lumotlari muvaffaqiyatli saqlandi/tahrirlandi", data };
-  }
-
-  /**
    * Profil o'sish dinamikasi (Insights)
    * Followers growth
    */
@@ -206,14 +195,6 @@ export class InstagramService {
     } catch (error) {
       this._handleError('uploadStory', error);
     }
-  }
-
-  /**
-   * Hikoyani o'chirish
-   */
-  async deleteStory(mediaId) {
-    // Graph API orqali media delete qilish umuman cheklangan, ammo endpoint nomidan mock qilamiz
-    return { success: true, message: `Story ${mediaId} muvaffaqiyatli o'chirildi.` };
   }
 
   async uploadReels(videoUrl, caption) {

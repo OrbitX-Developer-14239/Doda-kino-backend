@@ -28,20 +28,6 @@ router.get("/profile", authMiddleware(["superadmin", "admin"]), InstagramControl
 
 /**
  * @swagger
- * /api/instagram/profile:
- *   put:
- *     summary: Update Instagram Profile Data (Local Simulation)
- *     tags: [Instagram]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Profile updated successfully
- */
-router.put("/profile", authMiddleware(["superadmin", "admin"]), InstagramController.updateProfile);
-
-/**
- * @swagger
  * /api/instagram/growth:
  *   get:
  *     summary: Get Profile Growth Dynamics for Charts
@@ -105,25 +91,5 @@ router.get("/stories", authMiddleware(["superadmin", "admin"]), InstagramControl
  *         description: Story uploaded 
  */
 router.post("/stories", authMiddleware(["superadmin", "admin"]), upload.single('media'), InstagramController.uploadStory);
-
-/**
- * @swagger
- * /api/instagram/stories/{id}:
- *   delete:
- *     summary: Delete a Story
- *     tags: [Instagram]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Story deleted successfully
- */
-router.delete("/stories/:id", authMiddleware(["superadmin", "admin"]), InstagramController.deleteStory);
 
 export default router;
