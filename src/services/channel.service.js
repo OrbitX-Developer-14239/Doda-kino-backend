@@ -92,7 +92,6 @@ export const ChannelService = {
         const botApi = new Api(botToken.token);
         const channelTid = existChannel.telegram_id;
 
-        // 1. Kanaldagi umumiy a'zolar soni (Telegram API dan)
         let telegramMemberCount = 0;
         try {
             telegramMemberCount = await botApi.getChatMemberCount(channelTid);
@@ -100,13 +99,10 @@ export const ChannelService = {
             console.error("Failed to get chat member count:", e.message);
         }
 
-        // 2. Bot orqali kuzatilgan barcha foydalanuvchilarni topish
-        //    (channels_condition massivida shu kanal mavjud bo'lgan userlar)
         const trackedUsers = await UserModel.find({
             "channels_condition.telegram_id": channelTid
         }).select("telegram_id");
 
-        // 3. Har bir foydalanuvchining haqiqiy holatini Telegram API dan tekshirish
         const SUBSCRIBED = ["member", "creator", "administrator"];
         let joinedActive = 0;
         let joinedLeft = 0;
@@ -117,10 +113,9 @@ export const ChannelService = {
                 if (SUBSCRIBED.includes(member.status)) {
                     joinedActive++;
                 } else {
-                    joinedLeft++; // Avval bot orqali kirib, hozir chiqib ketgan
+                    joinedLeft++;
                 }
             } catch (e) {
-                // Agar user topilmasa yoki xato bo'lsa — chiqib ketgan deb hisoblaymiz
                 joinedLeft++;
             }
         });
@@ -131,7 +126,7 @@ export const ChannelService = {
             ...existChannel.toObject(),
             statistics: {
                 total_members: telegramMemberCount,
-                joined_via_bot: joinedActive + joinedLeft, // Jami bot orqali o'tganlar
+                joined_via_bot: joinedActive + joinedLeft,
                 left_via_bot: joinedLeft
             }
         };
