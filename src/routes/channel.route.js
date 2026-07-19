@@ -59,6 +59,26 @@ router.get("/", ChannelController.getChannels)
 /**
  * @swagger
  * /api/channel/{id}:
+ *   get:
+ *     summary: Get channel by ID and its statistics
+ *     tags: [Channels]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Channel retrieved successfully with stats
+ *       404:
+ *         description: Channel not found
+ */
+router.get("/:id", ChannelController.getChannelById)
+
+/**
+ * @swagger
+ * /api/channel/{id}:
  *   delete:
  *     summary: Delete a channel
  *     tags: [Channels]

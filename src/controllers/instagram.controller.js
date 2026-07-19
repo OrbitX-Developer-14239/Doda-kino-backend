@@ -21,6 +21,11 @@ export const InstagramController = {
         res.status(200).json({ success: true, data });
     }),
 
+    getPostById: catchAsync(async (req, res) => {
+        const data = await instagramService.getPostById(req.params.id);
+        res.status(200).json({ success: true, data });
+    }),
+
     getStories: catchAsync(async (req, res) => {
         const data = await instagramService.getStories();
         res.status(200).json({ success: true, data });

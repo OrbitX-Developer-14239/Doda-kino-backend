@@ -42,7 +42,7 @@ router.get("/growth", authMiddleware(["superadmin", "admin"]), InstagramControll
 
 /**
  * @swagger
- * /api/instagram/statistics/posts:
+ * /api/instagram/posts:
  *   get:
  *     summary: Get Statistics for Posts (likes, comments, reach, best posts)
  *     tags: [Instagram]
@@ -52,7 +52,27 @@ router.get("/growth", authMiddleware(["superadmin", "admin"]), InstagramControll
  *       200:
  *         description: Bar/Pie chart formats and Top Posts data
  */
-router.get("/statistics/posts", authMiddleware(["superadmin", "admin"]), InstagramController.getPostStats);
+router.get("/posts", authMiddleware(["superadmin", "admin"]), InstagramController.getPostStats);
+
+/**
+ * @swagger
+ * /api/instagram/posts/{id}:
+ *   get:
+ *     summary: Get single post by id
+ *     tags: [Instagram]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Full details of a single post
+ */
+router.get("/posts/:id", authMiddleware(["superadmin", "admin"]), InstagramController.getPostById);
 
 /**
  * @swagger

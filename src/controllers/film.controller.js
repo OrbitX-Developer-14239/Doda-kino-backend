@@ -12,6 +12,12 @@ export const FilmController = {
         res.status(201).json({ success: true, data })
     }),
 
+    getFilmById: catchAsync(async (req, res) => {
+        const data = await FilmService.getFilmById(req.params.id)
+        if (!data) throw Object.assign(new Error("Film topilmadi"), { status: 404 });
+        res.status(200).json({ success: true, data })
+    }),
+
     getFilmsList: catchAsync(async (req, res) => {
         const page = parseInt(req.query.page) || 1
         const result = await FilmService.getAllFilmsPaginated(page)

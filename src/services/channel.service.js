@@ -1,6 +1,7 @@
 import { Api } from "grammy"
 import { ChannelModel } from "../models/channels.model.js"
 import { BotModel } from "../models/bot.model.js"
+import { UserModel } from "../models/user.model.js"
 
 export const ChannelService = {
     async checkStatus(channelId) {
@@ -70,6 +71,70 @@ export const ChannelService = {
         const channels = await ChannelModel.find()
 
         return channels
+    },
+
+    async getChannelById(id) {
+        const existChannel = await ChannelModel.findById(id);
+
+        if (!existChannel) {
+            const error = new Error("Kanal topilmadi!");
+            error.status = 404;
+            throw error;
+        }
+
+        const botToken = await BotModel.findOne();
+        if (!botToken || !botToken.token) {
+            const error = new Error("Bot token topilmadi!");
+            error.status = 404;
+            throw error;
+        }
+
+        const botApi = new Api(botToken.token);
+        const channelTid = existChannel.telegram_id;
+
+        // 1. Kanaldagi umumiy a'zolar soni (Telegram API dan)
+        let telegramMemberCount = 0;
+        try {
+            telegramMemberCount = await botApi.getChatMemberCount(channelTid);
+        } catch (e) {
+            console.error("Failed to get chat member count:", e.message);
+        }
+
+        // 2. Bot orqali kuzatilgan barcha foydalanuvchilarni topish
+        //    (channels_condition massivida shu kanal mavjud bo'lgan userlar)
+        const trackedUsers = await UserModel.find({
+            "channels_condition.telegram_id": channelTid
+        }).select("telegram_id");
+
+        // 3. Har bir foydalanuvchining haqiqiy holatini Telegram API dan tekshirish
+        const SUBSCRIBED = ["member", "creator", "administrator"];
+        let joinedActive = 0;
+        let joinedLeft = 0;
+
+        const checkPromises = trackedUsers.map(async (user) => {
+            try {
+                const member = await botApi.getChatMember(channelTid, Number(user.telegram_id));
+                if (SUBSCRIBED.includes(member.status)) {
+                    joinedActive++;
+                } else {
+                    joinedLeft++; // Avval bot orqali kirib, hozir chiqib ketgan
+                }
+            } catch (e) {
+                // Agar user topilmasa yoki xato bo'lsa — chiqib ketgan deb hisoblaymiz
+                joinedLeft++;
+            }
+        });
+
+        await Promise.allSettled(checkPromises);
+
+        return {
+            ...existChannel.toObject(),
+            statistics: {
+                total_members: telegramMemberCount,
+                joined_via_bot: joinedActive + joinedLeft, // Jami bot orqali o'tganlar
+                left_via_bot: joinedLeft
+            }
+        };
     },
 
     async deleteChannel(id) {

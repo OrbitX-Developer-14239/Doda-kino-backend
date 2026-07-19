@@ -45,6 +45,26 @@ router.get("/code/:code", FilmController.searchByCode)
 
 /**
  * @swagger
+ * /api/film/id/{id}:
+ *   get:
+ *     summary: Get film by database ID
+ *     tags: [Films]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Responds with film details
+ *       404:
+ *         description: Film not found
+ */
+router.get("/id/:id", FilmController.getFilmById)
+
+/**
+ * @swagger
  * /api/film/search:
  *   post:
  *     summary: Search film using AI

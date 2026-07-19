@@ -62,6 +62,10 @@ export const FilmService = {
         return data;
     },
 
+    async getFilmById(id) {
+        return await FilmModel.findById(id);
+    },
+
     async getAllFilmsPaginated(page = 1) {
         const limit = CONFIG.ITEMS_PER_PAGE || 12;
         const skip = (page - 1) * limit;

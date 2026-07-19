@@ -14,6 +14,12 @@ export const ChannelController = {
         res.status(200).json({ success: true, data })
     }),
 
+    getChannelById: catchAsync(async (req, res) => {
+        const data = await ChannelService.getChannelById(req.params.id)
+
+        res.status(200).json({ success: true, data })
+    }),
+
     deleteChannel: catchAsync(async (req, res) => {
         const data = await ChannelService.deleteChannel(req.params.id)
 

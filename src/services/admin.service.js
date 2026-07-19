@@ -125,6 +125,38 @@ export const AdminService = {
             };
         }
 
+        if (normalizedContactData.authSessionToken) {
+            const accessToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_SECRET, { expiresIn: "15m" });
+            const refreshToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_REFRESH_SECRET, { expiresIn: "15d" });
+
+            admin.refreshToken = refreshToken;
+            admin.telegramId = normalizedContactData.telegramId ?? admin.telegramId;
+            admin.telegramUsername = normalizedContactData.telegramUsername ?? admin.telegramUsername;
+            admin.firstName = normalizedContactData.firstName ?? admin.firstName;
+            admin.lastName = normalizedContactData.lastName ?? admin.lastName;
+            admin.phoneNumber = normalizedContactData.phoneNumber ?? admin.phoneNumber;
+            await admin.save();
+
+            const { getIo } = await import("../socket.js");
+            const io = getIo();
+            if (io) {
+                io.to(`auth_${normalizedContactData.authSessionToken}`).emit("auth_success", {
+                    success: true,
+                    data: {
+                        accessToken,
+                        refreshToken,
+                        user: { id: admin._id, username: admin.username, role: admin.role }
+                    }
+                });
+            }
+
+            return {
+                success: true,
+                message: "Muvaffaqiyatli uladingiz, brauzerga qaytishingiz mumkin",
+                viaSocket: true
+            }
+        }
+
         const loginToken = crypto.randomUUID();
         const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
@@ -158,12 +190,16 @@ export const AdminService = {
         const startLink = botUsername ? `https://t.me/${botUsername}?start=login` : null;
 
         if (!adminId) {
+            const authSessionToken = crypto.randomUUID();
+            const loginLink = botUsername ? `https://t.me/${botUsername}?start=admin_login_${authSessionToken}` : null;
+
             return {
                 success: true,
                 message: "Telegram botiga kirish uchun quyidagi tugmani bosing.",
-                loginLink: startLink,
-                telegramOpenUrl: startLink,
-                botStartUrl: startLink,
+                loginLink: loginLink,
+                telegramOpenUrl: loginLink,
+                botStartUrl: loginLink,
+                authSessionToken: authSessionToken,
                 panelAuthUrl: null,
                 expiresInMinutes: 15,
             };
