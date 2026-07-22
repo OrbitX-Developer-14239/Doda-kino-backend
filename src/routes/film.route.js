@@ -125,6 +125,15 @@ router.post("/search", FilmController.searchByAi)
  *               description:
  *                 type: string
  *                 example: "Film haqida batafsil ma'lumot"
+ *               posterId:
+ *                 type: object
+ *                 properties:
+ *                   channelId:
+ *                     type: string
+ *                     example: "3831468244"
+ *                   msgId:
+ *                     type: integer
+ *                     example: 4
  *               episodesCount:
  *                 type: integer
  *                 example: 12
@@ -133,5 +142,26 @@ router.post("/search", FilmController.searchByAi)
  *         description: Film created
  */
 router.post("/", upload.single('poster'), validate(filmValidation), FilmController.createFilm)
+
+/**
+ * @swagger
+ * /api/film/{id}:
+ *   delete:
+ *     summary: Delete a film and all its episodes
+ *     tags: [Films]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Film Database ID (_id) or Film Code
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Film and its episodes deleted successfully
+ *       404:
+ *         description: Film not found
+ */
+router.delete("/:id", FilmController.deleteFilm)
 
 export default router

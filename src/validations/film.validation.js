@@ -16,5 +16,14 @@ export const filmValidation = z.object({
         }, z.array(z.string())).optional(),
         description: z.string().trim().min(10, "Kengroq ta'rif bering"),
         episodesCount: z.coerce.number().int().min(1, "Kamida 1 qism bo'lishi kerak"),
+        posterId: z.preprocess(val => {
+            if (typeof val === 'string') {
+                try { return JSON.parse(val); } catch (e) { return val; }
+            }
+            return val;
+        }, z.object({
+            channelId: z.coerce.string().min(1, "channelId majburiy"),
+            msgId: z.coerce.number().int().min(1, "msgId majburiy")
+        }, { invalid_type_error: "posterId ob'yekt bo'lishi kerak: { channelId, msgId }" }).optional()),
     })
 });

@@ -16,7 +16,15 @@ export const EpisodeValidation = z.object({
         code: z.coerce.number().int().min(100, "Kodingiz 100 dan kichik bo'lishi mumkin emas"),
         episodeNumber: z.coerce.number().int().min(1, "Qism tartib raqami 1 dan boshlanishi kerak"),
         name: z.string().trim().min(1, "Qism nomi kamida 1ta harfdan iborat bo'lishi kerak"),
-        videoFileId: z.string().min(1, "Video fayl (Telegram Cloud uchun) majburiy"),
+        videoFileId: z.preprocess(val => {
+            if (typeof val === 'string') {
+                try { return JSON.parse(val); } catch (e) { return val; }
+            }
+            return val;
+        }, z.object({
+            channelId: z.coerce.string().min(1, "channelId majburiy"),
+            msgId: z.coerce.number().int().min(1, "msgId majburiy")
+        }, { invalid_type_error: "videoFileId ob'yekt bo'lishi kerak: { channelId, msgId }" }).optional()),
         description: z.string().trim().min(10, "Kengroq ta'rif bering").optional().or(z.string().max(0)),
         releaseYear: z.coerce.number().int().min(1800).max(new Date().getFullYear()).optional(),
         country: z.string().trim().min(2).optional(),
@@ -30,9 +38,12 @@ export const EpisodeValidation = z.object({
         }, z.array(z.string())).optional(),
         editVideos: z.preprocess(val => {
             if (typeof val === 'string') {
-                try { return JSON.parse(val); } catch (e) { }
+                try { val = JSON.parse(val); } catch (e) { }
             }
-            return val;
+            if (Array.isArray(val)) {
+                return val.filter(item => item && typeof item.videoUrl === 'string' && item.videoUrl.trim().length > 0);
+            }
+            return Array.isArray(val) ? val : [];
         }, z.array(editVideoValidation).max(10, "Maksimal 10 ta edit video yuklash mumkin").optional())
     })
 });

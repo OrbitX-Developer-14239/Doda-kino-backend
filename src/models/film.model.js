@@ -10,7 +10,7 @@ const FilmSchema = new Schema({
     genres: [{ type: String, required: true }],
 
     code: { type: Number, required: true, unique: true, index: true },
-    posterId: { type: String },
+    posterId: { type: Schema.Types.Mixed },
 
     episodes: [{
         _id: false,
@@ -21,7 +21,8 @@ const FilmSchema = new Schema({
         description: { type: String },
         releaseYear: { type: Number },
         country: { type: String },
-        genres: [{ type: String }]
+        genres: [{ type: String }],
+        videoFileId: { type: Schema.Types.Mixed }
     }]
 }, { timestamps: true });
 

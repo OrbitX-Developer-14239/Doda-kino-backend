@@ -17,6 +17,7 @@ export const ChannelService = {
         try {
             const botInfo = await botApi.getMe();
             const botMember = await botApi.getChatMember(channelId, botInfo.id);
+            const chat = await botApi.getChat(channelId);
 
             const isAdmin = botMember.status === "administrator" || botMember.status === "creator";
 
@@ -29,10 +30,21 @@ export const ChannelService = {
                 };
             }
 
+            const canInvite = botMember.status === "creator" || botMember.can_invite_users === true;
+            if (!canInvite) {
+                return {
+                    is_admin: false,
+                    status: botMember.status,
+                    permissions: botMember,
+                    message: "Bot kanalda admin, lekin u uchun 'Foydalanuvchilarni taklif qilish' (can_invite_users / Add Users) huquqi yoqilmagan!"
+                };
+            }
+
             const { status, user, ...permissions } = botMember;
 
             return {
                 is_admin: true,
+                chat_id: String(chat.id),
                 ...permissions
             };
         } catch (err) {
@@ -42,8 +54,38 @@ export const ChannelService = {
         }
     },
 
+    async generateInviteLink(channelId, joinType = "request") {
+        const botToken = await BotModel.findOne();
+        if (!botToken || !botToken.token) {
+            const error = new Error("Bot token topilmadi!");
+            error.status = 404;
+            throw error;
+        }
+
+        const botApi = new Api(botToken.token);
+        const createsJoinRequest = joinType === "request";
+
+        try {
+            const res = await botApi.createChatInviteLink(channelId, {
+                creates_join_request: createsJoinRequest,
+                name: createsJoinRequest ? "Zayafkali obuna" : "Oddiy obuna"
+            });
+            return res.invite_link;
+        } catch (err) {
+            console.error("[ChannelService] createChatInviteLink xatosi:", err.message);
+            if (err.message?.includes("not enough rights")) {
+                const error = new Error("Bot kanalda admin, lekin u uchun 'Foydalanuvchilarni taklif qilish' (can_invite_users / Add Users) huquqi yoqilmagan! Telegram kanal sozlamalaridan botga ushbu huquqni bering.");
+                error.status = 400;
+                throw error;
+            }
+            const error = new Error(`Telegram taklif havolasini yaratishda xatolik: ${err.message}`);
+            error.status = 400;
+            throw error;
+        }
+    },
+
     async createChannel(body) {
-        const existChannel = await ChannelModel.findOne({ url: body.invite_link });
+        const existChannel = await ChannelModel.findOne({ telegram_id: body.telegram_id });
 
         if (existChannel) {
             const error = new Error("Bu kanal bazada allaqachon mavjud!");
@@ -59,8 +101,25 @@ export const ChannelService = {
             throw error;
         }
 
+        const joinType = body.join_type || "request";
+        const realTelegramId = status.chat_id || body.telegram_id;
+        let inviteLink;
+
+        try {
+            inviteLink = await this.generateInviteLink(realTelegramId, joinType);
+        } catch (e) {
+            if (body.invite_link) {
+                inviteLink = body.invite_link;
+            } else {
+                throw e;
+            }
+        }
+
         const data = await ChannelModel.create({
             ...body,
+            telegram_id: realTelegramId,
+            invite_link: inviteLink,
+            join_type: joinType,
             bot_permissions: status
         });
 
@@ -130,6 +189,42 @@ export const ChannelService = {
                 left_via_bot: joinedLeft
             }
         };
+    },
+
+    async updateChannel(id, body) {
+        const existChannel = await ChannelModel.findById(id);
+
+        if (!existChannel) {
+            const error = new Error("Kanal topilmadi!");
+            error.status = 404;
+            throw error;
+        }
+
+        const status = await this.checkStatus(existChannel.telegram_id);
+        if (!status.is_admin) {
+            const error = new Error(status.message);
+            error.status = 400;
+            throw error;
+        }
+
+        const realTelegramId = status.chat_id || existChannel.telegram_id;
+        let newJoinType = body.join_type || existChannel.join_type;
+        let newInviteLink = existChannel.invite_link;
+
+        // Agar join_type o'zgarsa yoki invite_link mavjud bo'lmasa, yangi taklif havolasi yaratamiz
+        if (body.join_type || !existChannel.invite_link) {
+            newInviteLink = await this.generateInviteLink(realTelegramId, newJoinType);
+        }
+
+        if (body.name !== undefined) existChannel.name = body.name;
+        if (body.is_active !== undefined) existChannel.is_active = body.is_active;
+        existChannel.telegram_id = realTelegramId;
+        existChannel.join_type = newJoinType;
+        existChannel.invite_link = newInviteLink;
+        existChannel.bot_permissions = status;
+
+        await existChannel.save();
+        return existChannel;
     },
 
     async deleteChannel(id) {

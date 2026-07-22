@@ -39,4 +39,11 @@ export const FilmController = {
 
         res.status(200).json({ success: true, data: result })
     }),
+
+    deleteFilm: catchAsync(async (req, res) => {
+        const { id } = req.params;
+        const result = await FilmService.deleteFilm(id);
+
+        res.status(200).json({ success: true, ...result })
+    }),
 }

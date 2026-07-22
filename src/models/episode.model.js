@@ -16,7 +16,7 @@ export const EpisodeSchema = new Schema({
     releaseYear: { type: Number },
     country: { type: String },
     genres: [{ type: String }],
-    videoFileId: { type: String, required: true },
+    videoFileId: { type: Schema.Types.Mixed, required: true },
 
     code: { type: Number, required: true, unique: true, index: true },
 

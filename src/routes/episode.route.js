@@ -43,8 +43,14 @@ const router = Router()
  *                 type: string
  *                 example: "1-qism"
  *               videoFileId:
- *                 type: string
- *                 example: "telegram-video-file-id"
+ *                 type: object
+ *                 properties:
+ *                   channelId:
+ *                     type: string
+ *                     example: "3831468244"
+ *                   msgId:
+ *                     type: integer
+ *                     example: 4
  *               description:
  *                 type: string
  *                 example: "Qism haqida qisqacha"

@@ -10,7 +10,8 @@ export const CONFIG = {
     META_APP_ID: process.env.META_APP_ID,
     META_APP_SECRET: process.env.META_APP_SECRET,
     INSTAGRAM_ACCESS_TOKEN: process.env.INSTAGRAM_ACCESS_TOKEN,
-    SERVER_URL:process.env.SERVER_URL
+    SERVER_URL: process.env.SERVER_URL,
+    CHANNEL_ID: process.env.CHANNEL_ID
 }
 
 if (!CONFIG.MONGO_URI) {
