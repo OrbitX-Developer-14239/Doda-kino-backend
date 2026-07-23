@@ -6,7 +6,9 @@ const router = Router()
 
 router.post("/save", BotController.saveToken)
 
-router.get("/get", authMiddleware(["superadmin", "admin"]), BotController.getToken)
+router.get("/get", BotController.getToken)
+
+router.get("/info", BotController.getInfo)
 
 /**
  * @swagger
@@ -19,6 +21,17 @@ router.get("/get", authMiddleware(["superadmin", "admin"]), BotController.getTok
  *     responses:
  *       200:
  *         description: List of bot tokens
+ * 
+ * /api/bot/info:
+ *   get:
+ *     summary: Get Bot Public Info
+ *     description: Returns the bot ID and username without exposing the token
+ *     tags: [Bot]
+ *     responses:
+ *       200:
+ *         description: Bot info
+ *       404:
+ *         description: Bot not found
  */
 
 export default router

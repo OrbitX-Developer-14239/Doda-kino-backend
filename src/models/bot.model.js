@@ -1,8 +1,10 @@
-import { model, Schema } from "mongoose";
+import { Schema } from "mongoose";
+import { conn2 } from "../config/db.js";
 
 const BotSchema = new Schema({
     token: { type: String, required: true },
+    botId: { type: Number, required: true },
     username: { type: String, required: true }
 }, { timestamps: true })
 
-export const BotModel = model("Bot", BotSchema)
+export const BotModel = conn2.model("Bot", BotSchema)

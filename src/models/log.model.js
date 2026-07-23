@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { conn2 } from "../config/db.js";
 
 const logSchema = new mongoose.Schema({
     timestamp: {
@@ -18,4 +19,4 @@ const logSchema = new mongoose.Schema({
     }
 }, { versionKey: false, timestamps: false });
 
-export const LogModel = mongoose.model("Log", logSchema, "server_logs");
+export const LogModel = conn2.model("Log", logSchema, "server_logs");

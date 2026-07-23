@@ -1,4 +1,5 @@
-import { Schema, model } from "mongoose";
+import { Schema } from "mongoose";
+import { conn2 } from "../config/db.js";
 
 const AdminSchema = new Schema({
     username: { type: String, required: true, unique: true },
@@ -16,4 +17,4 @@ const AdminSchema = new Schema({
     telegramLoginExpiresAt: { type: Date, default: null },
 }, { timestamps: true })
 
-export const AdminModel = model("Admin", AdminSchema)
+export const AdminModel = conn2.model("Admin", AdminSchema)

@@ -1,4 +1,5 @@
-import { Schema, model } from "mongoose";
+import { Schema } from "mongoose";
+import { conn1 } from "../config/db.js";
 
 const channelSchema = new Schema({
     telegram_id: { type: String, required: true, unique: true },
@@ -9,4 +10,4 @@ const channelSchema = new Schema({
     bot_permissions: { type: Object, default: null }
 }, { timestamps: true });
 
-export const ChannelModel = model("Channel", channelSchema);
+export const ChannelModel = conn1.model("Channel", channelSchema);

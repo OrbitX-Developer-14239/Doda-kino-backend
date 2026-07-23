@@ -1,10 +1,18 @@
 import { UserModel } from "../models/user.model.js";
+import { ChannelModel } from "../models/channels.model.js";
 
 export const UserService = {
     async createUser(body) {
+        const updateDoc = { $set: {} };
+        for (const [key, value] of Object.entries(body)) {
+            if (value !== undefined) {
+                updateDoc.$set[key] = value;
+            }
+        }
+        
         const data = await UserModel.findOneAndUpdate(
             { telegram_id: body.telegram_id },
-            { $set: body },
+            updateDoc,
             { returnDocument: "after", upsert: true }
         )
         return data
@@ -15,14 +23,25 @@ export const UserService = {
         const existingUser = await UserModel.findOne({ telegram_id: body.telegram_id });
         let newConditions = body.channels_condition || [];
 
-        if (existingUser && existingUser.channels_condition) {
-            // Har qanday eski va yangi ma'lumotlarni birlashtirish
-            const mergedMap = new Map();
-            existingUser.channels_condition.forEach(c => {
-                if (c && c.telegram_id) mergedMap.set(c.telegram_id, c);
-            });
+        // Hozirgi aktiv kanallarni olamiz
+        const activeChannels = await ChannelModel.find({}, { telegram_id: 1 }).lean();
+        const activeIds = new Set(activeChannels.map(c => c.telegram_id));
 
+        const mergedMap = new Map();
+
+        if (existingUser && existingUser.channels_condition) {
+            existingUser.channels_condition.forEach(c => {
+                // Faqat aktiv kanallarni qoldiramiz
+                if (c && c.telegram_id && activeIds.has(c.telegram_id)) {
+                    mergedMap.set(c.telegram_id, c);
+                }
+            });
+        }
+
+        if (newConditions.length > 0) {
             newConditions.forEach(newC => {
+                if (!activeIds.has(newC.telegram_id)) return;
+                
                 const oldC = mergedMap.get(newC.telegram_id) || {};
                 const hasJoinedItem = newC.is_member || oldC.has_joined || false;
 
@@ -32,17 +51,22 @@ export const UserService = {
                     has_joined: hasJoinedItem
                 });
             });
+        }
+
+        if (body.channels_condition) {
             body.channels_condition = Array.from(mergedMap.values());
-        } else if (body.channels_condition) {
-            body.channels_condition = body.channels_condition.map(newC => ({
-                ...newC,
-                has_joined: newC.is_member
-            }));
+        }
+
+        const updateDoc = { $set: {} };
+        for (const [key, value] of Object.entries(body)) {
+            if (value !== undefined) {
+                updateDoc.$set[key] = value;
+            }
         }
 
         const data = await UserModel.findOneAndUpdate(
             { telegram_id: body.telegram_id },
-            { $set: body },
+            updateDoc,
             { returnDocument: "after", upsert: true }
         )
         return data

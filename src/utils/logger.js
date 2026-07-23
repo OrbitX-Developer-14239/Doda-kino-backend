@@ -46,7 +46,7 @@ export const logger = winston.createLogger({
         }),
         new winston.transports.MongoDB({
             level: "info",
-            db: CONFIG.MONGO_URI,
+            db: CONFIG.MONGO_URI2,
             collection: "server_logs",
             expireAfterSeconds: 72 * 60 * 60,
             format: combine(

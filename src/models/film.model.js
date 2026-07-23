@@ -1,4 +1,5 @@
-import { Schema, model } from "mongoose";
+import { Schema } from "mongoose";
+import { conn1 } from "../config/db.js";
 
 const FilmSchema = new Schema({
     name: { type: String, required: true, index: 'text' },
@@ -26,4 +27,4 @@ const FilmSchema = new Schema({
     }]
 }, { timestamps: true });
 
-export const FilmModel = model("Film", FilmSchema);
+export const FilmModel = conn1.model("Film", FilmSchema);

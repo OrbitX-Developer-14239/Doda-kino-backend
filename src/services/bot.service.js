@@ -10,11 +10,13 @@ export const BotService = {
         }
 
         let botUsername = username;
-        if (!botUsername) {
+        let botId = Number(token.split(":")[0]);
+        if (!botUsername || isNaN(botId)) {
             try {
                 const botApi = new Api(token);
                 const me = await botApi.getMe();
                 botUsername = me.username;
+                botId = me.id;
             } catch (e) {
                 const error = new Error(`Telegram bot token yaroqsiz: ${e.message}`);
                 error.status = 400;
@@ -24,12 +26,24 @@ export const BotService = {
 
         // Har doim yagona bot tokenini saqlaymiz (eski keraksiz tokenlarni o'chirib yangisini yozamiz)
         await BotModel.deleteMany({});
-        const data = await BotModel.create({ token, username: botUsername });
+        const data = await BotModel.create({ token, botId, username: botUsername });
 
         return { message: "Bot tokeni saqlandi!", data };
     },
 
     async getToken() {
         return await BotModel.find();
+    },
+
+    async getBotInfo() {
+        const bot = await BotModel.findOne();
+        if (!bot) {
+            return null;
+        }
+        return {
+            _id: bot._id,
+            botId: bot.botId,
+            username: bot.username
+        };
     }
 };

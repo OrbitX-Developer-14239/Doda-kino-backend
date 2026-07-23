@@ -1,4 +1,5 @@
-import { Schema, model } from "mongoose";
+import { Schema } from "mongoose";
+import { conn1 } from "../config/db.js";
 
 const EditVideoSchema = new Schema({
     videoUrl: { type: String, required: true },
@@ -27,4 +28,4 @@ export const EpisodeSchema = new Schema({
     editVideos: [EditVideoSchema]
 }, { timestamps: true });
 
-export const EpisodeModel = model("Episode", EpisodeSchema);
+export const EpisodeModel = conn1.model("Episode", EpisodeSchema);
