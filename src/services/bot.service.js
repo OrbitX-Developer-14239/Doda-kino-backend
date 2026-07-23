@@ -13,14 +13,11 @@ export const BotService = {
             throw error
         }
 
-        const existToken = await BotModel.findOne({ token })
+        // Har doim yagona bot tokenini saqlaymiz (eski keraksiz tokenlarni o'chirib yangisini yozamiz)
+        await BotModel.deleteMany({});
+        await BotModel.create({ token, username });
 
-        if (existToken) {
-            await BotModel.updateOne({ token }, { $set: { token, username } })
-        } else {
-            await BotModel.create({ token, username })
-        }
-        return { message: "Bot tokeni saqlandi!" }
+        return { message: "Bot tokeni saqlandi!" };
     },
 
     async getToken() {
