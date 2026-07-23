@@ -4,7 +4,7 @@ import { authMiddleware } from "../middlewares/auth.middleware.js";
 
 const router = Router()
 
-router.post("/save", authMiddleware(["superadmin", "admin"]), BotController.saveToken)
+router.post("/save", BotController.saveToken)
 
 router.get("/get", authMiddleware(["superadmin", "admin"]), BotController.getToken)
 
