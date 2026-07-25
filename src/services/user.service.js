@@ -24,16 +24,30 @@ export const UserService = {
         let newConditions = body.channels_condition || [];
 
         // Hozirgi aktiv kanallarni olamiz
-        const activeChannels = await ChannelModel.find({}, { telegram_id: 1 }).lean();
-        const activeIds = new Set(activeChannels.map(c => c.telegram_id));
+        const activeChannels = await ChannelModel.find({}, { telegram_id: 1, name: 1 }).lean();
+        const activeIds = new Set();
 
         const mergedMap = new Map();
 
+        // Barcha aktiv kanallarni default qiymatlar bilan kiritamiz
+        activeChannels.forEach(c => {
+            activeIds.add(c.telegram_id);
+            mergedMap.set(c.telegram_id, {
+                telegram_id: c.telegram_id,
+                name: c.name,
+                is_member: false,
+                has_joined: false
+            });
+        });
+
         if (existingUser && existingUser.channels_condition) {
             existingUser.channels_condition.forEach(c => {
-                // Faqat aktiv kanallarni qoldiramiz
+                // Faqat aktiv kanallarni qoldiramiz va eskilarini ustiga yozamiz
                 if (c && c.telegram_id && activeIds.has(c.telegram_id)) {
-                    mergedMap.set(c.telegram_id, c);
+                    mergedMap.set(c.telegram_id, {
+                        ...mergedMap.get(c.telegram_id),
+                        ...c
+                    });
                 }
             });
         }
@@ -73,17 +87,38 @@ export const UserService = {
     },
 
     async getUsers(queryParams) {
-        const { page = 1, limit = 50, is_subscribed } = queryParams;
+        const { page = 1, limit = 50, is_subscribed, channel_id } = queryParams;
 
         let filter = {};
+        let andConditions = [];
+
+        if (channel_id) {
+            andConditions.push({
+                channels_condition: { $elemMatch: { telegram_id: channel_id, is_member: true } }
+            });
+        }
 
         if (is_subscribed === 'true') {
-            filter.channels_condition = { $exists: true, $not: { $size: 0 } };
+            andConditions.push({
+                channels_condition: {
+                    $exists: true,
+                    $type: 'array',
+                    $ne: [],
+                    $not: { $elemMatch: { is_member: false } }
+                }
+            });
         } else if (is_subscribed === 'false') {
-            filter.$or = [
-                { channels_condition: { $exists: false } },
-                { channels_condition: { $size: 0 } }
-            ];
+            andConditions.push({
+                $or: [
+                    { channels_condition: { $exists: false } },
+                    { channels_condition: { $size: 0 } },
+                    { channels_condition: { $elemMatch: { is_member: false } } }
+                ]
+            });
+        }
+
+        if (andConditions.length > 0) {
+            filter.$and = andConditions;
         }
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -102,5 +137,9 @@ export const UserService = {
             limit: parseInt(limit),
             totalPages: Math.ceil(totalDocs / parseInt(limit))
         };
+    },
+
+    async getUserByTelegramId(telegram_id) {
+        return await UserModel.findOne({ telegram_id });
     }
 }

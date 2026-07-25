@@ -21,5 +21,16 @@ export const userController = {
         const data = await UserService.getUsers(req.query)
 
         res.status(200).json({ success: true, data })
+    }),
+
+    getUserByTelegramId: catchAsync(async (req, res) => {
+        const { telegram_id } = req.params;
+        const data = await UserService.getUserByTelegramId(telegram_id);
+        
+        if (!data) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        
+        res.status(200).json({ success: true, data });
     })
 }
