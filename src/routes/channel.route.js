@@ -37,6 +37,9 @@ const router = Router()
  *               is_active:
  *                 type: boolean
  *                 example: true
+ *               isPrivate:
+ *                 type: boolean
+ *                 example: false
  *     responses:
  *       201:
  *         description: Channel created successfully
@@ -100,6 +103,8 @@ router.get("/:id", ChannelController.getChannelById)
  *                 type: string
  *                 enum: [request, public]
  *               is_active:
+ *                 type: boolean
+ *               isPrivate:
  *                 type: boolean
  *     responses:
  *       200:

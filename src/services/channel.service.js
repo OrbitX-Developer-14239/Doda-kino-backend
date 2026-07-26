@@ -120,6 +120,7 @@ export const ChannelService = {
             telegram_id: realTelegramId,
             invite_link: inviteLink,
             join_type: joinType,
+            isPrivate: body.isPrivate || false,
             bot_permissions: status
         });
 
@@ -218,6 +219,7 @@ export const ChannelService = {
 
         if (body.name !== undefined) existChannel.name = body.name;
         if (body.is_active !== undefined) existChannel.is_active = body.is_active;
+        if (body.isPrivate !== undefined) existChannel.isPrivate = body.isPrivate;
         existChannel.telegram_id = realTelegramId;
         existChannel.join_type = newJoinType;
         existChannel.invite_link = newInviteLink;

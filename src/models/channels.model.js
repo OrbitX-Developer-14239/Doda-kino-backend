@@ -7,6 +7,7 @@ const channelSchema = new Schema({
     invite_link: { type: String, required: false },
     join_type: { type: String, enum: ["request", "public"], default: "request" },
     is_active: { type: Boolean, default: false },
+    isPrivate: { type: Boolean, default: false },
     bot_permissions: { type: Object, default: null }
 }, { timestamps: true });
 
