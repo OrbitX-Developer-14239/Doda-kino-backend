@@ -71,6 +71,45 @@ export const FilmService = {
         return data;
     },
 
+    async updateFilm(id, body) {
+        const film = await FilmModel.findById(id);
+        if (!film) {
+            const error = new Error("Film topilmadi");
+            error.status = 404;
+            throw error;
+        }
+
+        // If code is being changed, check if it's already used
+        if (body.code && Number(body.code) !== film.code) {
+            const exists = await FilmModel.findOne({ code: body.code });
+            if (exists) {
+                const error = new Error("Bunday code mavjud, boshqa code kiriting!");
+                error.status = 409;
+                throw error;
+            }
+        }
+
+        const updatedData = {
+            name: body.name || film.name,
+            originalName: body.originalName || film.originalName,
+            description: body.description || film.description,
+            year: body.year || film.year,
+            country: body.country || film.country,
+            genres: body.genres && body.genres.length > 0 ? body.genres : film.genres,
+            code: body.code ? Number(body.code) : film.code,
+            episodesCount: body.episodesCount || film.episodesCount
+        };
+
+        const updatedFilm = await FilmModel.findByIdAndUpdate(id, updatedData, { new: true });
+
+        // Update AI index if needed
+        import('./ai.service.js').then(({ AIService }) => {
+            AIService.addFilmToIndex(updatedFilm).catch(() => { });
+        });
+
+        return updatedFilm;
+    },
+
     async getFilmById(id) {
         return await FilmModel.findById(id);
     },

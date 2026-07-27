@@ -164,4 +164,50 @@ router.post("/", upload.single('poster'), validate(filmValidation), FilmControll
  */
 router.delete("/:id", FilmController.deleteFilm)
 
+/**
+ * @swagger
+ * /api/film/{id}:
+ *   put:
+ *     summary: Update a film's text data
+ *     tags: [Films]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Film Database ID (_id)
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               code:
+ *                 type: integer
+ *               name:
+ *                 type: string
+ *               originalName:
+ *                 type: string
+ *               year:
+ *                 type: integer
+ *               country:
+ *                 type: string
+ *               genres:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               description:
+ *                 type: string
+ *               episodesCount:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Film updated successfully
+ *       404:
+ *         description: Film not found
+ */
+router.put("/:id", FilmController.updateFilm)
+
 export default router

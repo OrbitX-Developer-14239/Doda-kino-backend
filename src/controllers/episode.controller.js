@@ -13,6 +13,14 @@ export const EpisodeController = {
         res.status(201).json({ success: true, data });
     }),
 
+    updateEpisode: catchAsync(async (req, res, next) => {
+        const { id } = req.params;
+        const body = req.body;
+        
+        const data = await EpisodeService.updateEpisode(id, body);
+        res.status(200).json({ success: true, data });
+    }),
+
     searchByCode: catchAsync(async (req, res) => {
         const episodeCode = Number(req.params.code);
 

@@ -112,6 +112,55 @@ export const EpisodeService = {
         return episode;
     },
 
+    async updateEpisode(id, body) {
+        const episode = await EpisodeModel.findById(id);
+        if (!episode) {
+            const error = new Error("Epizod topilmadi");
+            error.status = 404;
+            throw error;
+        }
+
+        // Check if code is being updated and conflicts
+        if (body.code && Number(body.code) !== episode.code) {
+            const exists = await EpisodeModel.findOne({ code: body.code });
+            if (exists) {
+                const error = new Error("Bunday code mavjud, boshqa code kiriting!");
+                error.status = 409;
+                throw error;
+            }
+        }
+
+        const updatedData = {
+            name: body.name || episode.name,
+            description: body.description || episode.description,
+            episodeNumber: body.episodeNumber ? Number(body.episodeNumber) : episode.episodeNumber,
+            releaseYear: body.releaseYear ? Number(body.releaseYear) : episode.releaseYear,
+            country: body.country || episode.country,
+            genres: body.genres && body.genres.length > 0 ? body.genres : episode.genres,
+            code: body.code ? Number(body.code) : episode.code,
+        };
+
+        const updatedEpisode = await EpisodeModel.findByIdAndUpdate(id, updatedData, { new: true });
+
+        // Update the episode inside the Film's episodes array
+        await FilmModel.updateOne(
+            { _id: updatedEpisode.filmId, "episodes.episodeId": updatedEpisode._id },
+            {
+                $set: {
+                    "episodes.$.name": updatedEpisode.name,
+                    "episodes.$.description": updatedEpisode.description,
+                    "episodes.$.episodeNumber": updatedEpisode.episodeNumber,
+                    "episodes.$.releaseYear": updatedEpisode.releaseYear,
+                    "episodes.$.country": updatedEpisode.country,
+                    "episodes.$.genres": updatedEpisode.genres,
+                    "episodes.$.code": updatedEpisode.code,
+                }
+            }
+        );
+
+        return updatedEpisode;
+    },
+
     async searchByCode(code) {
         return await EpisodeModel.findOne({ code });
     }

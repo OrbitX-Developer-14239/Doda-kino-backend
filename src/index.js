@@ -12,6 +12,7 @@ import swaggerJsdoc from "swagger-jsdoc";
 
 import adminRouter from "./routes/admin.route.js"
 import logsRouter from "./routes/logs.route.js"
+import statisticsRouter from "./routes/statistics.route.js"
 import { logger } from "./utils/logger.js"
 const app = express()
 
@@ -79,6 +80,7 @@ app.use("/api/user", userRouter)
 app.use("/api/instagram", instagramRouter)
 app.use("/api/admin", adminRouter)
 app.use("/api/log", logsRouter)
+app.use("/api/statistics", statisticsRouter)
 
 app.use((err, req, res, next) => {
     logger.error(`GLOBAL ERROR 🔥: ${err.stack}`)

@@ -24,6 +24,7 @@ export const EpisodeSchema = new Schema({
     filmId: { type: Schema.Types.ObjectId, ref: "Film", required: true },
     instagramPostId: { type: String },
     instagramUrl: { type: String },
+    views: { type: Number, default: 0 },
 
     editVideos: [EditVideoSchema]
 }, { timestamps: true });

@@ -12,6 +12,14 @@ export const FilmController = {
         res.status(201).json({ success: true, data })
     }),
 
+    updateFilm: catchAsync(async (req, res) => {
+        const { id } = req.params;
+        const body = req.body;
+        
+        const data = await FilmService.updateFilm(id, body);
+        res.status(200).json({ success: true, data });
+    }),
+
     getFilmById: catchAsync(async (req, res) => {
         const data = await FilmService.getFilmById(req.params.id)
         if (!data) throw Object.assign(new Error("Film topilmadi"), { status: 404 });

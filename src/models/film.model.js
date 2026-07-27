@@ -12,6 +12,7 @@ const FilmSchema = new Schema({
 
     code: { type: Number, required: true, unique: true, index: true },
     posterId: { type: Schema.Types.Mixed },
+    views: { type: Number, default: 0 },
 
     episodes: [{
         _id: false,

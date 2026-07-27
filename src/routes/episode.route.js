@@ -95,4 +95,48 @@ router.post("/", upload.single('instagramVideo'), validate(EpisodeValidation), E
  */
 router.get("/code/:code", EpisodeController.searchByCode)
 
+/**
+ * @swagger
+ * /api/episode/{id}:
+ *   put:
+ *     summary: Update an episode's text data
+ *     tags: [Episodes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Episode Database ID (_id)
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               code:
+ *                 type: integer
+ *               episodeNumber:
+ *                 type: integer
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               releaseYear:
+ *                 type: integer
+ *               country:
+ *                 type: string
+ *               genres:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Episode updated successfully
+ *       404:
+ *         description: Episode not found
+ */
+router.put("/:id", EpisodeController.updateEpisode)
+
 export default router
