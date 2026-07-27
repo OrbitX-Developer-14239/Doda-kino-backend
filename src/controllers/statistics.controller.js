@@ -1,5 +1,4 @@
-import { FilmModel } from "../models/film.model.js";
-import { EpisodeModel } from "../models/episode.model.js";
+import { StatisticsService } from "../services/statistics.service.js";
 import { logger } from "../utils/logger.js";
 
 export const StatisticsController = {
@@ -11,13 +10,7 @@ export const StatisticsController = {
                 return res.status(400).json({ success: false, message: "Type va code majburiy!" });
             }
 
-            if (type === "film") {
-                await FilmModel.updateOne({ code: Number(code) }, { $inc: { views: 1 } });
-            } else if (type === "episode") {
-                await EpisodeModel.updateOne({ code: Number(code) }, { $inc: { views: 1 } });
-            } else {
-                return res.status(400).json({ success: false, message: "Noto'g'ri type!" });
-            }
+            await StatisticsService.addView(type, code);
 
             return res.status(200).json({ success: true, message: "View qo'shildi" });
         } catch (error) {
@@ -26,18 +19,34 @@ export const StatisticsController = {
         }
     },
 
-    async getTop(req, res, next) {
+    async getAll(req, res, next) {
         try {
-            const limit = parseInt(req.query.limit) || 10;
-            const topFilms = await FilmModel.find().sort({ views: -1 }).limit(limit).select("name originalName code views");
-            const topEpisodes = await EpisodeModel.find().sort({ views: -1 }).limit(limit).select("name code views filmId").populate("filmId", "name");
+            const page = parseInt(req.query.page) || 1;
+            const limit = 20;
+
+            const result = await StatisticsService.getAll(page, limit);
 
             return res.status(200).json({
                 success: true,
-                data: {
-                    topFilms,
-                    topEpisodes
-                }
+                ...result
+            });
+        } catch (error) {
+            logger.error(`[StatisticsController.getAll] Error: ${error.message}`);
+            next(error);
+        }
+    },
+
+    async getTop(req, res, next) {
+        try {
+            const topCount = parseInt(req.query.top) || 100;
+            const page = parseInt(req.query.page) || 1;
+            const limit = 20;
+
+            const result = await StatisticsService.getTop(topCount, page, limit);
+
+            return res.status(200).json({
+                success: true,
+                ...result
             });
         } catch (error) {
             logger.error(`[StatisticsController.getTop] Error: ${error.message}`);
