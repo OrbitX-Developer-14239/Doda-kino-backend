@@ -59,7 +59,7 @@ router.post("/view", StatisticsController.addView);
  *       200:
  *         description: Barcha film va epizodlar ro'yxati (pagination bilan)
  */
-router.get("/", authMiddleware(), StatisticsController.getAll);
+router.get("/", StatisticsController.getAll);
 
 /**
  * @swagger
@@ -86,6 +86,6 @@ router.get("/", authMiddleware(), StatisticsController.getAll);
  *       200:
  *         description: Eng ko'p ko'rilganlar ro'yxati (pagination bilan)
  */
-router.get("/top", authMiddleware(), StatisticsController.getTop);
+router.get("/top", StatisticsController.getTop);
 
 export default router;
