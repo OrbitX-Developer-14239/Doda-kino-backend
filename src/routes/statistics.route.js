@@ -11,33 +11,6 @@ const router = Router();
  *   description: Filmlar va epizodlar statistikasi
  */
 
-/**
- * @swagger
- * /api/statistics/view:
- *   post:
- *     summary: Film yoki epizod ko'rishlar sonini bittaga oshirish
- *     tags: [Statistics]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - type
- *               - code
- *             properties:
- *               type:
- *                 type: string
- *                 enum: [film, episode]
- *                 example: film
- *               code:
- *                 type: number
- *                 example: 50001
- *     responses:
- *       200:
- *         description: View muvaffaqiyatli qo'shildi
- */
 router.post("/view", StatisticsController.addView);
 
 /**

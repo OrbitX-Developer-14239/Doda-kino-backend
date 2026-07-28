@@ -55,6 +55,23 @@ export const AdminController = {
         res.status(200).json({ success: true, data });
     }),
 
+    initTelegramLogin: catchAsync(async (req, res) => {
+        const data = await AdminService.requestTelegramLogin(req.admin?._id);
+        res.status(200).json({ success: true, data });
+    }),
+
+    cancelTelegramLogin: catchAsync(async (req, res) => {
+        const { authSessionToken } = req.body;
+        if (authSessionToken) {
+            const { getIo } = await import("../socket.js");
+            const io = getIo();
+            if (io) {
+                io.to(`auth_${authSessionToken}`).emit("auth_error", { message: "Bekor qilindi" });
+            }
+        }
+        res.status(200).json({ success: true });
+    }),
+
     requestTelegramLogin: catchAsync(async (req, res) => {
         const body = req.body || {};
         const hasTelegramIdentity = Boolean(

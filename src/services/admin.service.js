@@ -25,6 +25,7 @@ const normalizeContactData = (contactData = {}) => ({
     firstName: contactData.firstName ?? contactData.first_name ?? null,
     lastName: contactData.lastName ?? contactData.last_name ?? null,
     telegramUsername: contactData.telegramUsername ?? contactData.username ?? contactData.telegram_username ?? null,
+    authSessionToken: contactData.authSessionToken ?? null,
 });
 
 const hashToken = (token) => crypto.createHash("sha256").update(String(token)).digest("hex");
@@ -119,6 +120,11 @@ export const AdminService = {
         }).sort({ createdAt: 1 });
 
         if (!admin) {
+            const { getIo } = await import("../socket.js");
+            const io = getIo();
+            if (io && normalizedContactData.authSessionToken) {
+                 io.to(`auth_${normalizedContactData.authSessionToken}`).emit("auth_error", { message: "Telefon raqamingiz tizimda topilmadi!" });
+            }
             return {
                 success: false,
                 message: "Telefon raqamingiz tizimda topilmadi!"

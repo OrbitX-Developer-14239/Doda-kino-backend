@@ -60,7 +60,14 @@ router.post("/verify/:token", AdminController.verifyAdmin);
 
 router.post("/verify-bot", botAuthMiddleware(), AdminController.verifyAdminByBot);
 
+// Frontend telegram login link generatsiya qilish uchun (bot token so'ramaydi)
+router.post("/telegram-login/init", AdminController.initTelegramLogin);
+
+// Bot tomonidan loginni tasdiqlash uchun (bot token so'raydi, pastda telegram-login-link bor)
 router.post("/telegram-login", botAuthMiddleware(), AdminController.requestTelegramLogin);
+
+// Bot tomonidan login bekor qilinganda
+router.post("/telegram-login/cancel", botAuthMiddleware(), AdminController.cancelTelegramLogin);
 
 /**
  * @swagger
