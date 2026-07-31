@@ -127,11 +127,40 @@ export const AdminController = {
     logout: catchAsync(async (req, res) => {
         res.clearCookie('refreshToken');
         const data = await AdminService.logout(req.admin._id);
-        res.status(200).json({ success: true, data });
+        res.status(200).json({ success: true, data }); 
     }),
 
     getAllAdmins: catchAsync(async (req, res) => {
         const data = await AdminService.getAllAdmins();
         res.status(200).json({ success: true, data });
-    })
+    }),
+
+    getMe: catchAsync(async (req, res) => {
+        const admin = await AdminService.getAdminProfile(req.admin?._id);
+        res.status(200).json({ success: true, data: admin });
+    }),
+
+    // ─── TELEGRAM ULASH (login dan alohida) ──────────────────────────────────
+
+    initTelegramLink: catchAsync(async (req, res) => {
+        const data = await AdminService.requestTelegramLink(req.admin?._id);
+        res.status(200).json({ success: true, data });
+    }),
+
+    linkAdminByContact: catchAsync(async (req, res) => {
+        const data = await AdminService.linkAdminByContact(req.body || {});
+        res.status(200).json({ success: true, data });
+    }),
+
+    cancelTelegramLink: catchAsync(async (req, res) => {
+        const { authSessionToken } = req.body;
+        if (authSessionToken) {
+            const { getIo } = await import("../socket.js");
+            const io = getIo();
+            if (io) {
+                io.to(`auth_${authSessionToken}`).emit("link_error", { message: "Bekor qilindi" });
+            }
+        }
+        res.status(200).json({ success: true });
+    }),
 }

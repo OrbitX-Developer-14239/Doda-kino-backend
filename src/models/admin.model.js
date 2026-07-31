@@ -15,6 +15,9 @@ const AdminSchema = new Schema({
     telegramId: { type: Number, default: null },
     telegramLoginTokenHash: { type: String, default: null },
     telegramLoginExpiresAt: { type: Date, default: null },
+    telegramAuthSessionToken: { type: String, default: null },
+    telegramLinkTokenHash: { type: String, default: null },
+    telegramLinkExpiresAt: { type: Date, default: null },
 }, { timestamps: true })
 
 export const AdminModel = conn2.model("Admin", AdminSchema)

@@ -78,6 +78,15 @@ export const AdminService = {
         return { accessToken, refreshToken, user: { id: admin._id, username: admin.username, role: admin.role } };
     },
 
+    async getAdminProfile(adminId) {
+        if (!adminId) throw Object.assign(new Error("Admin ID kerak"), { status: 400 });
+        const admin = await AdminModel.findById(adminId).select(
+            "username role isVerified telegramId telegramUsername firstName lastName phoneNumber createdAt"
+        );
+        if (!admin) throw Object.assign(new Error("Admin topilmadi"), { status: 404 });
+        return admin;
+    },
+
     async createAdmin(body) {
         const exist = await AdminModel.findOne({ username: body.username });
         if (exist) throw Object.assign(new Error("Bu username band qilingan, boshqasini tanlang!"), { status: 409 });
@@ -103,6 +112,97 @@ export const AdminService = {
             verifyLink,
             admin: { username: admin.username }
         };
+    },
+
+    // ─── TELEGRAM ULASH (login dan alohida) ─────────────────────────────────────
+
+    async requestTelegramLink(adminId) {
+        if (!adminId) throw Object.assign(new Error("Admin ID kerak"), { status: 400 });
+
+        const admin = await AdminModel.findById(adminId);
+        if (!admin) throw Object.assign(new Error("Admin topilmadi"), { status: 404 });
+        if (!admin.isVerified) throw Object.assign(new Error("Admin tasdiqlanmagan"), { status: 403 });
+
+        const bot = await BotModel.findOne();
+        const botUsername = bot?.username || process.env.BOT_USERNAME || "";
+
+        const linkToken = crypto.randomUUID();
+        const authSessionToken = crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+        admin.telegramLinkTokenHash = hashToken(linkToken);
+        admin.telegramLinkExpiresAt = expiresAt;
+        admin.telegramAuthSessionToken = authSessionToken;
+        await admin.save();
+
+        const linkUrl = botUsername ? `https://t.me/${botUsername}?start=admin_link_${linkToken}` : null;
+
+        return {
+            success: true,
+            linkUrl,
+            authSessionToken,
+            expiresInMinutes: 15,
+            expiresAt,
+        };
+    },
+
+    async linkAdminByContact(contactData = {}) {
+        const { linkToken, telegramId, telegramUsername, phoneNumber, firstName, lastName } = contactData;
+
+        if (!linkToken) throw Object.assign(new Error("Link token kerak"), { status: 400 });
+
+        const admin = await AdminModel.findOne({
+            telegramLinkTokenHash: hashToken(linkToken),
+            telegramLinkExpiresAt: { $gt: new Date() },
+        });
+
+        if (!admin) {
+            throw Object.assign(new Error("Havola muddati tugagan yoki yaroqsiz"), { status: 401 });
+        }
+
+        const authSessionToken = admin.telegramAuthSessionToken;
+
+        // Boshqa adminda ulangan bo'lsa — xato
+        if (telegramId) {
+            const alreadyLinked = await AdminModel.findOne({
+                telegramId: telegramId,
+                _id: { $ne: admin._id },
+            });
+
+            if (alreadyLinked) {
+                const { getIo } = await import("../socket.js");
+                const io = getIo();
+                if (io && authSessionToken) {
+                    io.to(`auth_${authSessionToken}`).emit("link_error", {
+                        message: "Bu Telegram hisob boshqa admin hisobiga ulangan!"
+                    });
+                }
+                return { success: false, message: "Bu Telegram hisob boshqa admin hisobiga ulangan!" };
+            }
+        }
+
+        // Ulash
+        admin.telegramId = telegramId ?? admin.telegramId;
+        admin.telegramUsername = telegramUsername ?? admin.telegramUsername;
+        admin.phoneNumber = phoneNumber ?? admin.phoneNumber;
+        admin.firstName = firstName ?? admin.firstName;
+        admin.lastName = lastName ?? admin.lastName;
+        admin.telegramLinkTokenHash = null;
+        admin.telegramLinkExpiresAt = null;
+        admin.telegramAuthSessionToken = null;
+        await admin.save();
+
+        // Socket orqali muvaffaqiyat xabari
+        const { getIo } = await import("../socket.js");
+        const io = getIo();
+        if (io && authSessionToken) {
+            io.to(`auth_${authSessionToken}`).emit("link_success", {
+                success: true,
+                data: { telegramUsername: telegramUsername || null, telegramId: telegramId || null }
+            });
+        }
+
+        return { success: true, message: "Telegram hisob muvaffaqiyatli ulandi" };
     },
 
     async createTelegramLoginLinkForContact(contactData = {}) {
@@ -216,10 +316,12 @@ export const AdminService = {
         if (!admin.isVerified) throw Object.assign(new Error("Bu admin hali tasdiqlanmagan"), { status: 403 });
 
         const loginToken = crypto.randomUUID();
+        const authSessionToken = crypto.randomUUID(); // Socket room uchun
         const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
         admin.telegramLoginTokenHash = hashToken(loginToken);
         admin.telegramLoginExpiresAt = expiresAt;
+        admin.telegramAuthSessionToken = authSessionToken; // Saqlash
         await admin.save();
 
         const loginLink = botUsername ? `https://t.me/${botUsername}?start=admin_login_${loginToken}` : null;
@@ -231,6 +333,7 @@ export const AdminService = {
             telegramOpenUrl: loginLink,
             botStartUrl: loginLink,
             panelAuthUrl: buildAdminPanelAuthUrl(loginToken),
+            authSessionToken, // Frontend socket uchun
             expiresInMinutes: 15,
             expiresAt,
             user: { id: admin._id, username: admin.username, role: admin.role }
@@ -245,14 +348,32 @@ export const AdminService = {
             throw Object.assign(new Error("Telegram login linki muddati tugagan yoki yaroqsiz"), { status: 401 });
         }
 
+        const authSessionToken = admin.telegramAuthSessionToken;
+
         admin.telegramLoginTokenHash = null;
         admin.telegramLoginExpiresAt = null;
+        admin.telegramAuthSessionToken = null;
 
         const accessToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_SECRET, { expiresIn: "15m" });
         const refreshToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_REFRESH_SECRET, { expiresIn: "15d" });
 
         admin.refreshToken = refreshToken;
         await admin.save();
+
+        // Settings sahifasidagi Telegram ulash socketini xabar berish
+        if (authSessionToken) {
+            const { getIo } = await import("../socket.js");
+            const io = getIo();
+            if (io) {
+                io.to(`auth_${authSessionToken}`).emit("auth_success", {
+                    success: true,
+                    data: {
+                        accessToken,
+                        user: { id: admin._id, username: admin.username, role: admin.role }
+                    }
+                });
+            }
+        }
 
         return {
             message: "Telegram orqali kirish muvaffaqiyatli yakunlandi.",

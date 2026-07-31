@@ -60,6 +60,9 @@ router.post("/verify/:token", AdminController.verifyAdmin);
 
 router.post("/verify-bot", botAuthMiddleware(), AdminController.verifyAdminByBot);
 
+// Joriy admin profili (telegramId ulangan yoki yo'qligini bilish uchun)
+router.get("/me", authMiddleware(), AdminController.getMe);
+
 // Frontend telegram login link generatsiya qilish uchun (bot token so'ramaydi)
 router.post("/telegram-login/init", AdminController.initTelegramLogin);
 
@@ -199,5 +202,13 @@ router.post("/logout", authMiddleware(), AdminController.logout);
  *         description: List of admins
  */
 router.get("/all", authMiddleware(["superadmin"]), AdminController.getAllAdmins);
+
+// ─── TELEGRAM ULASH (login dan alohida) ──────────────────────────────────────
+// Frontenddan: admin tizimga kirgan holda telegram hisobini ulash uchun link oladi
+router.post("/telegram-link/init", authMiddleware(), AdminController.initTelegramLink);
+// Botdan: admin_link_ havolasini bosib, kontakt yuborilganda chaqiriladi
+router.post("/telegram-link", botAuthMiddleware(), AdminController.linkAdminByContact);
+// Botdan yoki frontenddan: ulashni bekor qilish
+router.post("/telegram-link/cancel", botAuthMiddleware(), AdminController.cancelTelegramLink);
 
 export default router;

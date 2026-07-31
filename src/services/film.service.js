@@ -122,7 +122,7 @@ export const FilmService = {
         const totalPages = Math.ceil(totalFilms / limit);
 
         const films = await FilmModel.find()
-            .select("name originalName year code")
+            .select("name originalName year code views posterId")
             .skip(skip)
             .limit(limit)
             .sort({ createdAt: -1 });
