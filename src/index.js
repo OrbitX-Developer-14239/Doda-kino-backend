@@ -45,7 +45,12 @@ app.use(cors((req, callback) => {
 
     const selfOrigin = `${req.protocol}://${req.headers.host}`;
 
-    if (origin === selfOrigin || CONFIG.CORS_ORIGINS.includes(origin)) {
+    // Ishlab chiqish rejimi: panel dasturchining noutbukida istalgan portda turishi mumkin
+    // (CRA 3000, Vite 5173, ...). CORS_ALLOW_LOCALHOST=true bo'lsagina yoqiladi.
+    const isLocalhost = CONFIG.CORS_ALLOW_LOCALHOST &&
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(origin);
+
+    if (origin === selfOrigin || isLocalhost || CONFIG.CORS_ORIGINS.includes(origin)) {
         return callback(null, { origin, credentials: true });
     }
 

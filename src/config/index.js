@@ -32,6 +32,10 @@ export const CONFIG = {
     ADMIN_PANEL_URL: process.env.ADMIN_PANEL_URL || "http://127.0.0.1:3000",
     CORS_ORIGINS: parseList(process.env.CORS_ORIGINS),
 
+    // Ishlab chiqish uchun: istalgan localhost portidan (3000, 5173, ...) ruxsat beradi.
+    // Panel tayyor bo'lgach o'chirib qo'yish kerak — pastdagi izohga qarang.
+    CORS_ALLOW_LOCALHOST: process.env.CORS_ALLOW_LOCALHOST === "true",
+
     // Swagger production da faqat shu bayroq bilan ochiladi
     ENABLE_SWAGGER: process.env.ENABLE_SWAGGER === "true",
     SWAGGER_USER: process.env.SWAGGER_USER || "docs",
