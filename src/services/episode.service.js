@@ -165,7 +165,7 @@ export const EpisodeService = {
 
         let updatedEpisode;
         try {
-            updatedEpisode = await EpisodeModel.findByIdAndUpdate(id, updatedData, { new: true });
+            updatedEpisode = await EpisodeModel.findByIdAndUpdate(id, updatedData, { returnDocument: "after" });
         } catch (err) {
             throw duplicateKeyError(err, "Bunday code mavjud, boshqa code kiriting!");
         }

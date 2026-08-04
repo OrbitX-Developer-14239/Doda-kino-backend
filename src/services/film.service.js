@@ -103,7 +103,7 @@ export const FilmService = {
 
         let updatedFilm;
         try {
-            updatedFilm = await FilmModel.findByIdAndUpdate(id, updatedData, { new: true });
+            updatedFilm = await FilmModel.findByIdAndUpdate(id, updatedData, { returnDocument: "after" });
         } catch (err) {
             throw duplicateKeyError(err, "Bunday code mavjud, boshqa code kiriting!");
         }
