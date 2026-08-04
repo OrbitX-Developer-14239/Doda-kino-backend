@@ -13,6 +13,9 @@ export class InstagramService {
 
     this.api = axios.create({
       baseURL: this.baseUrl,
+      // Node da default timeout YO'Q — Meta API osilib qolsa so'rov cheksiz
+      // ushlanib turardi va ulanishlar hovuzini to'ldirardi.
+      timeout: 20_000,
       params: { access_token: this.accessToken }
     });
   }

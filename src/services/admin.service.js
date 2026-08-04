@@ -1,11 +1,43 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { CONFIG } from "../config/index.js";
 import { AdminModel } from "../models/admin.model.js";
-import { BotModel } from "../models/bot.model.js";
+import { AuthSessionModel } from "../models/auth-session.model.js";
+import { BotService } from "./bot.service.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "asil_secret_jwt_key";
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "asil_secret_refresh_key";
+const AUTH_SESSION_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Socket xonasi uchun sessiya tokenini yaratadi va serverda ro'yxatga oladi.
+ * Ro'yxatdan o'tmagan tokenga socket orqali qo'shilib bo'lmaydi.
+ */
+const createAuthSession = async (purpose, adminId = null) => {
+    const token = crypto.randomUUID();
+    await AuthSessionModel.create({
+        token,
+        purpose,
+        adminId,
+        expiresAt: new Date(Date.now() + AUTH_SESSION_TTL_MS)
+    });
+    return token;
+};
+
+const JWT_SECRET = CONFIG.JWT_SECRET;
+const JWT_REFRESH_SECRET = CONFIG.JWT_REFRESH_SECRET;
+const BCRYPT_ROUNDS = 12;
+
+const PUBLIC_ADMIN_FIELDS =
+    "username role isVerified telegramId telegramUsername firstName lastName phoneNumber createdAt updatedAt";
+
+const issueTokens = (admin) => ({
+    accessToken: jwt.sign({ id: admin._id, role: admin.role }, JWT_SECRET, {
+        expiresIn: CONFIG.ACCESS_TOKEN_TTL
+    }),
+    refreshToken: jwt.sign({ id: admin._id, role: admin.role }, JWT_REFRESH_SECRET, {
+        expiresIn: CONFIG.REFRESH_TOKEN_TTL
+    })
+});
 
 const normalizeTelegramId = (value) => {
     if (value === null || value === undefined || value === "") return null;
@@ -31,22 +63,37 @@ const normalizeContactData = (contactData = {}) => ({
 const hashToken = (token) => crypto.createHash("sha256").update(String(token)).digest("hex");
 
 const buildAdminPanelAuthUrl = (token) => {
-    const baseUrl = process.env.ADMIN_PANEL_URL || "http://127.0.0.1:3000";
+    const baseUrl = CONFIG.ADMIN_PANEL_URL;
     return `${baseUrl.replace(/\/$/, "")}/admin/telegram-auth?token=${encodeURIComponent(token)}`;
 };
 
 export const AdminService = {
     async initSuperAdmin() {
-        const superAdmin = await AdminModel.findOne({ role: "superadmin" });
-        if (!superAdmin) {
-            const hashedPassword = await bcrypt.hash("superadmin123", 10);
-            await AdminModel.create({
-                username: "superadmin",
-                password: hashedPassword,
-                role: "superadmin",
-                isVerified: true
-            });
-            console.log("Dastlabki SUPERADMIN yaratildi! -> Login: superadmin | Parol: superadmin123");
+        const superAdmin = await AdminModel.findOne({ role: "superadmin" }).select("_id").lean();
+        if (superAdmin) return;
+
+        // Parol env dan olinadi; berilmasa tasodifiy yaratilib bir marta konsolga chiqadi.
+        // Ilgari bu yerda hamma biladigan "superadmin123" qattiq yozilgan edi.
+        const generated = !CONFIG.SUPERADMIN_PASSWORD;
+        const password = CONFIG.SUPERADMIN_PASSWORD || crypto.randomBytes(12).toString("base64url");
+        const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+
+        await AdminModel.create({
+            username: CONFIG.SUPERADMIN_USERNAME,
+            password: hashedPassword,
+            role: "superadmin",
+            isVerified: true
+        });
+
+        if (generated) {
+            console.log(
+                "\n" + "=".repeat(72) +
+                `\nDastlabki SUPERADMIN yaratildi!\n  Login: ${CONFIG.SUPERADMIN_USERNAME}\n  Parol: ${password}\n` +
+                "Ushbu parolni saqlab qo'ying — u boshqa ko'rsatilmaydi.\n" +
+                "=".repeat(72) + "\n"
+            );
+        } else {
+            console.log(`Dastlabki SUPERADMIN yaratildi (parol .env dan olindi) -> Login: ${CONFIG.SUPERADMIN_USERNAME}`);
         }
     },
 
@@ -59,7 +106,7 @@ export const AdminService = {
         if (!isMatch) throw Object.assign(new Error("Login yoki parol xato"), { status: 401 });
 
         if (!admin.isVerified) {
-            const bot = await BotModel.findOne();
+            const bot = await BotService.getCachedBot();
             if (!bot) throw Object.assign(new Error("Xatolik! Baza sozlamalariga bot token va username aniqlanmagan. Iltimos Bot ma'lumotlarini saqlang!"), { status: 400 });
 
             const verifyLink = `https://t.me/${bot.username}?start=verify_${admin.verifyToken}`;
@@ -70,8 +117,7 @@ export const AdminService = {
             };
         }
 
-        const accessToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_SECRET, { expiresIn: "15m" });
-        const refreshToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_REFRESH_SECRET, { expiresIn: "15d" });
+        const { accessToken, refreshToken } = issueTokens(admin);
         admin.refreshToken = refreshToken;
         await admin.save();
 
@@ -82,7 +128,7 @@ export const AdminService = {
         if (!adminId) throw Object.assign(new Error("Admin ID kerak"), { status: 400 });
         const admin = await AdminModel.findById(adminId).select(
             "username role isVerified telegramId telegramUsername firstName lastName phoneNumber createdAt"
-        );
+        ).lean();
         if (!admin) throw Object.assign(new Error("Admin topilmadi"), { status: 404 });
         return admin;
     },
@@ -91,7 +137,7 @@ export const AdminService = {
         const exist = await AdminModel.findOne({ username: body.username });
         if (exist) throw Object.assign(new Error("Bu username band qilingan, boshqasini tanlang!"), { status: 409 });
 
-        const hashedPassword = await bcrypt.hash(body.password, 10);
+        const hashedPassword = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
         const verifyToken = crypto.randomUUID();
 
         const admin = await AdminModel.create({
@@ -102,7 +148,7 @@ export const AdminService = {
             verifyToken: verifyToken
         });
 
-        const bot = await BotModel.findOne();
+        const bot = await BotService.getCachedBot();
         if (!bot) throw Object.assign(new Error("Serverda bot ulanmagan! Avval Bot Token va Username qoshing /api/bot/saveToken"), { status: 400 });
 
         const verifyLink = `https://t.me/${bot.username}?start=verify_${verifyToken}`;
@@ -123,11 +169,11 @@ export const AdminService = {
         if (!admin) throw Object.assign(new Error("Admin topilmadi"), { status: 404 });
         if (!admin.isVerified) throw Object.assign(new Error("Admin tasdiqlanmagan"), { status: 403 });
 
-        const bot = await BotModel.findOne();
+        const bot = await BotService.getCachedBot();
         const botUsername = bot?.username || process.env.BOT_USERNAME || "";
 
         const linkToken = crypto.randomUUID();
-        const authSessionToken = crypto.randomUUID();
+        const authSessionToken = await createAuthSession("link", admin._id);
         const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
         admin.telegramLinkTokenHash = hashToken(linkToken);
@@ -232,8 +278,7 @@ export const AdminService = {
         }
 
         if (normalizedContactData.authSessionToken) {
-            const accessToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_SECRET, { expiresIn: "15m" });
-            const refreshToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_REFRESH_SECRET, { expiresIn: "15d" });
+            const { accessToken, refreshToken } = issueTokens(admin);
 
             admin.refreshToken = refreshToken;
             admin.telegramId = normalizedContactData.telegramId ?? admin.telegramId;
@@ -246,11 +291,11 @@ export const AdminService = {
             const { getIo } = await import("../socket.js");
             const io = getIo();
             if (io) {
+                // refreshToken socket orqali YUBORILMAYDI — u faqat httpOnly cookie da yashaydi.
                 io.to(`auth_${normalizedContactData.authSessionToken}`).emit("auth_success", {
                     success: true,
                     data: {
                         accessToken,
-                        refreshToken,
                         user: { id: admin._id, username: admin.username, role: admin.role }
                     }
                 });
@@ -275,7 +320,7 @@ export const AdminService = {
         admin.phoneNumber = normalizedContactData.phoneNumber ?? admin.phoneNumber;
         await admin.save();
 
-        const bot = await BotModel.findOne();
+        const bot = await BotService.getCachedBot();
         const botUsername = bot?.username || process.env.BOT_USERNAME || "";
         const loginLink = botUsername ? `https://t.me/${botUsername}?start=admin_login_${loginToken}` : null;
 
@@ -291,12 +336,12 @@ export const AdminService = {
     },
 
     async requestTelegramLogin(adminId) {
-        const bot = await BotModel.findOne();
+        const bot = await BotService.getCachedBot();
         const botUsername = bot?.username || process.env.BOT_USERNAME || "";
         const startLink = botUsername ? `https://t.me/${botUsername}?start=login` : null;
 
         if (!adminId) {
-            const authSessionToken = crypto.randomUUID();
+            const authSessionToken = await createAuthSession("login");
             const loginLink = botUsername ? `https://t.me/${botUsername}?start=admin_login_${authSessionToken}` : null;
 
             return {
@@ -316,7 +361,7 @@ export const AdminService = {
         if (!admin.isVerified) throw Object.assign(new Error("Bu admin hali tasdiqlanmagan"), { status: 403 });
 
         const loginToken = crypto.randomUUID();
-        const authSessionToken = crypto.randomUUID(); // Socket room uchun
+        const authSessionToken = await createAuthSession("login", admin._id); // Socket room uchun
         const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
         admin.telegramLoginTokenHash = hashToken(loginToken);
@@ -354,8 +399,7 @@ export const AdminService = {
         admin.telegramLoginExpiresAt = null;
         admin.telegramAuthSessionToken = null;
 
-        const accessToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_SECRET, { expiresIn: "15m" });
-        const refreshToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_REFRESH_SECRET, { expiresIn: "15d" });
+        const { accessToken, refreshToken } = issueTokens(admin);
 
         admin.refreshToken = refreshToken;
         await admin.save();
@@ -399,8 +443,7 @@ export const AdminService = {
         admin.lastName = normalizedContactData.lastName;
         admin.telegramUsername = normalizedContactData.telegramUsername;
 
-        const accessToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_SECRET, { expiresIn: "15m" });
-        const refreshToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_REFRESH_SECRET, { expiresIn: "15d" });
+        const { accessToken, refreshToken } = issueTokens(admin);
 
         const loginToken = crypto.randomUUID();
         const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
@@ -430,7 +473,7 @@ export const AdminService = {
                 throw new Error();
             }
 
-            const newAccessToken = jwt.sign({ id: admin._id, role: admin.role }, JWT_SECRET, { expiresIn: "15m" });
+            const { accessToken: newAccessToken } = issueTokens(admin);
             return { accessToken: newAccessToken };
         } catch (error) {
             throw Object.assign(new Error("Refresh token yaroqsiz yoki eskirgan"), { status: 403 });
@@ -469,7 +512,7 @@ export const AdminService = {
         }
 
         if (body.password) {
-            targetAdmin.password = await bcrypt.hash(body.password, 10);
+            targetAdmin.password = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
         }
 
         if (body.firstName !== undefined) {
@@ -529,7 +572,7 @@ export const AdminService = {
     },
 
     async getAllAdmins() {
-        const admins = await AdminModel.find();
+        const admins = await AdminModel.find().select(PUBLIC_ADMIN_FIELDS).lean();
         return admins;
     }
 }

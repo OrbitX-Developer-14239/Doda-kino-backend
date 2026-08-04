@@ -1,9 +1,17 @@
 import { Router } from "express";
 import { AdminController } from "../controllers/admin.controller.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
-import { adminUpdateValidation, adminValidation } from "../validations/admin.validation.js";
+import {
+    adminUpdateValidation,
+    adminValidation,
+    verifyByBotValidation,
+    verifyByTokenValidation,
+    telegramAuthValidation,
+    telegramContactValidation,
+} from "../validations/admin.validation.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { botAuthMiddleware } from "../middlewares/botAuth.middleware.js";
+import { authLimiter } from "../middlewares/rateLimit.middleware.js";
 
 const router = Router();
 
@@ -38,7 +46,7 @@ const router = Router();
  *       200:
  *         description: Login successful
  */
-router.post("/login", validate(adminValidation), AdminController.login);
+router.post("/login", authLimiter, validate(adminValidation), AdminController.login);
 
 /**
  * @swagger
@@ -56,18 +64,18 @@ router.post("/login", validate(adminValidation), AdminController.login);
  *       200:
  *         description: Verified successfully
  */
-router.post("/verify/:token", AdminController.verifyAdmin);
+router.post("/verify/:token", authLimiter, validate(verifyByTokenValidation), AdminController.verifyAdmin);
 
-router.post("/verify-bot", botAuthMiddleware(), AdminController.verifyAdminByBot);
+router.post("/verify-bot", botAuthMiddleware(), validate(verifyByBotValidation), AdminController.verifyAdminByBot);
 
 // Joriy admin profili (telegramId ulangan yoki yo'qligini bilish uchun)
 router.get("/me", authMiddleware(), AdminController.getMe);
 
 // Frontend telegram login link generatsiya qilish uchun (bot token so'ramaydi)
-router.post("/telegram-login/init", AdminController.initTelegramLogin);
+router.post("/telegram-login/init", authLimiter, AdminController.initTelegramLogin);
 
 // Bot tomonidan loginni tasdiqlash uchun (bot token so'raydi, pastda telegram-login-link bor)
-router.post("/telegram-login", botAuthMiddleware(), AdminController.requestTelegramLogin);
+router.post("/telegram-login", botAuthMiddleware(), validate(telegramContactValidation), AdminController.requestTelegramLogin);
 
 // Bot tomonidan login bekor qilinganda
 router.post("/telegram-login/cancel", botAuthMiddleware(), AdminController.cancelTelegramLogin);
@@ -92,9 +100,9 @@ router.post("/telegram-login/cancel", botAuthMiddleware(), AdminController.cance
  *       200:
  *         description: Contact link processed
  */
-router.post("/telegram-login-link", botAuthMiddleware(), AdminController.requestTelegramLoginByContact);
+router.post("/telegram-login-link", botAuthMiddleware(), validate(telegramContactValidation), AdminController.requestTelegramLoginByContact);
 
-router.post("/telegram-auth", AdminController.telegramAuth);
+router.post("/telegram-auth", authLimiter, validate(telegramAuthValidation), AdminController.telegramAuth);
 
 /**
  * @swagger
@@ -173,7 +181,7 @@ router.delete("/:id", authMiddleware(["superadmin"]), AdminController.deleteAdmi
  *       200:
  *         description: Token refreshed
  */
-router.post("/refresh", AdminController.refresh);
+router.post("/refresh", authLimiter, AdminController.refresh);
 
 /**
  * @swagger
@@ -207,7 +215,7 @@ router.get("/all", authMiddleware(["superadmin"]), AdminController.getAllAdmins)
 // Frontenddan: admin tizimga kirgan holda telegram hisobini ulash uchun link oladi
 router.post("/telegram-link/init", authMiddleware(), AdminController.initTelegramLink);
 // Botdan: admin_link_ havolasini bosib, kontakt yuborilganda chaqiriladi
-router.post("/telegram-link", botAuthMiddleware(), AdminController.linkAdminByContact);
+router.post("/telegram-link", botAuthMiddleware(), validate(telegramContactValidation), AdminController.linkAdminByContact);
 // Botdan yoki frontenddan: ulashni bekor qilish
 router.post("/telegram-link/cancel", botAuthMiddleware(), AdminController.cancelTelegramLink);
 

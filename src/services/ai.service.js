@@ -48,7 +48,11 @@ export class AIService {
                     fs.mkdirSync(PERSIST_DIR, { recursive: true });
                 }
 
-                const filmArray = await FilmModel.find();
+                // Faqat kerakli maydonlar (ilgari `episodes` massivi bilan birga
+                // to'liq hujjatlar hydratsiya qilinardi)
+                const filmArray = await FilmModel.find()
+                    .select("name originalName")
+                    .lean();
 
                 if (filmArray.length === 0) {
                     console.log("🤖 [AI]: Bazada qidirish uchun film yo'q, Indexlash qoldirildi.");
@@ -56,19 +60,25 @@ export class AIService {
                 }
 
                 const documents = [];
-                for (const film of filmArray) {
-                    const textContent = film.originalName;
+                const BATCH = 16;
 
-                    const embedding = await embeddingModel.getTextEmbedding(textContent);
+                // Embedding lar to'plamlar bo'yicha hisoblanadi — bittalab ketma-ket
+                // hisoblash katta katalogda indekslashni bir necha barobar cho'zardi.
+                for (let i = 0; i < filmArray.length; i += BATCH) {
+                    const batch = filmArray.slice(i, i + BATCH);
+                    const embeddings = await Promise.all(
+                        batch.map((film) => embeddingModel.getTextEmbedding(film.originalName))
+                    );
 
-                    const doc = new Document({
-                        text: textContent,
-                        id_: `film_${film._id}`,
-                        metadata: { id: film._id.toString(), name: film.name, originalName: film.originalName }
+                    batch.forEach((film, idx) => {
+                        const doc = new Document({
+                            text: film.originalName,
+                            id_: `film_${film._id}`,
+                            metadata: { id: film._id.toString(), name: film.name, originalName: film.originalName }
+                        });
+                        doc.embedding = embeddings[idx];
+                        documents.push(doc);
                     });
-
-                    doc.embedding = embedding;
-                    documents.push(doc);
                 }
 
                 const storageContext = await storageContextFromDefaults({ persistDir: PERSIST_DIR });
@@ -78,6 +88,11 @@ export class AIService {
                 console.log("🤖 [AI]: Indekslash yakunlandi va 'storage/' papkasine xotiraga yozildi.");
             }
             console.log("🤖 [AI]: AI xizmati tayyor ✅");
+
+            // Embedding modeli birinchi ishlatilganda yuklanadi (birinchi marta —
+            // internetdan). Uni shu yerda oldindan isitamiz, aks holda restartdan
+            // keyingi BIRINCHI qidiruv bir necha sekundga cho'ziladi.
+            this.warmUp();
         } catch (error) {
             console.error("🤖 [AI]: Initializatsiya xatosi:", error.message);
             this.index = null;
@@ -85,6 +100,13 @@ export class AIService {
         } finally {
             this.isInitializing = false;
         }
+    }
+
+    static warmUp() {
+        const started = Date.now();
+        embeddingModel.getTextEmbedding("warmup")
+            .then(() => console.log(`🤖 [AI]: Embedding modeli tayyor (${Date.now() - started} ms)`))
+            .catch((e) => console.warn("🤖 [AI]: Embedding modelini isitib bo'lmadi:", e.message));
     }
 
     static async addFilmToIndex(film) {
@@ -95,7 +117,7 @@ export class AIService {
 
         try {
             console.log(`🤖 [AI]: Yangi kino indeks fayliga ulanmoqda -> "${film.originalName}"...`);
-            const textContent = film.originalName; // Faqat Nomi 
+            const textContent = film.originalName;
             const embedding = await embeddingModel.getTextEmbedding(textContent);
 
             const doc = new Document({
@@ -126,25 +148,32 @@ QOIDALAR:
 - DIQQAT: Hech qanday salomlashish yoki izoh ("Mana", "Ular" kabi) yozma! Mantiqan xato qilsang tizim portlaydi.
 - Agar umuman topa olmasang, aynan "Film topilmadi" deb yoz.`;
 
+            // Foydalanuvchi kiritgan matn bo'yicha qidiruv LLM javobiga bog'liq emas,
+            // shuning uchun u Groq chaqiruvi bilan BIR VAQTDA boshlanadi.
+            const directMatchesPromise = FilmService.searchByNames([userMessage]).catch(() => []);
+
             const groqResponse = await groq.chat.completions.create({
                 model: "openai/gpt-oss-120b",
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userMessage }
                 ],
+                // Diqqat: bu model "reasoning" tokenlarini ham shu limitdan sarflaydi.
+                // 1000 dan pasaytirilsa javob umuman bo'sh qaytadi.
                 max_tokens: 1000,
                 temperature: 0.1,
             });
 
             const predictedText = groqResponse.choices?.[0]?.message?.content?.trim();
+            const llmFailed = !predictedText || predictedText.toLowerCase().includes("topilmadi");
 
-            if (!predictedText || predictedText.toLowerCase().includes("topilmadi")) {
-                return [];
+            if (!llmFailed) {
+                console.log(`🤖 [AI]: Ai topgan variantlar: ${predictedText}`);
             }
 
-            console.log(`🤖 [AI]: Ai topgan variantlar: ${predictedText}`);
-
-            const predictedNames = predictedText.split(",").map(n => n.trim()).filter(Boolean);
+            const predictedNames = llmFailed
+                ? []
+                : predictedText.split(",").map(n => n.trim()).filter(Boolean);
 
             const allTermsToSearch = new Set();
             allTermsToSearch.add(userMessage);
@@ -158,59 +187,68 @@ QOIDALAR:
                 }
             }
 
+            const searchTerms = [...allTermsToSearch];
             const foundFilms = [];
             const foundIds = new Set();
 
+            const pushFilm = (film) => {
+                const filmIdStr = (film._id || film.id).toString();
+                if (foundIds.has(filmIdStr)) return;
+                foundIds.add(filmIdStr);
+                foundFilms.push({
+                    name: film.name,
+                    originalName: film.originalName,
+                    id: filmIdStr,
+                    year: film.year,
+                    code: film.code
+                });
+            };
 
-            for (const pName of allTermsToSearch) {
-                const dbResults = await FilmService.searchByName(pName);
+            // Groq bilan parallel boshlangan to'g'ridan-to'g'ri qidiruv natijalari
+            // birinchi bo'lib qo'shiladi — LLM ishlamay qolsa ham qidiruv ishlaydi.
+            (await directMatchesPromise).forEach(pushFilm);
 
-                if (dbResults && dbResults.length > 0) {
-                    dbResults.forEach(film => {
-                        const filmIdStr = (film._id || film.id).toString();
-                        if (!foundIds.has(filmIdStr)) {
-                            foundFilms.push({
-                                name: film.name,
-                                originalName: film.originalName,
-                                id: filmIdStr,
-                                year: film.year,
-                                code: film.code
-                            });
-                            foundIds.add(filmIdStr);
-                        }
-                    });
-                }
-                if (this.retriever) {
-                    try {
-                        const nodes = await this.retriever.retrieve({ query: pName });
-                        if (nodes && nodes.length > 0) {
-                            for (const n of nodes) {
-                                console.log(`Score: ${n.score} - ${n.node.metadata.name}`);
-                                const mId = n.node.metadata.id;
-                                if (n.score >= 0.5 && !foundIds.has(mId)) {
-                                    const dbFilm = await FilmModel.findById(mId);
-                                    if (dbFilm) {
-                                        foundFilms.push({
-                                            name: dbFilm.name,
-                                            originalName: dbFilm.originalName,
-                                            id: mId,
-                                            year: dbFilm.year,
-                                            code: dbFilm.code
-                                        });
-                                        foundIds.add(mId);
-                                    }
-                                }
+            // Qolgan barcha so'zlar BITTA so'rovda qidiriladi.
+            // Ilgari har bir so'z uchun alohida, ketma-ket regex skanerlash bo'lardi
+            // (20+ marta butun kolleksiya) — bu qidiruvni bir necha sekundga cho'zardi.
+            if (predictedNames.length) {
+                const dbResults = await FilmService.searchByNames(searchTerms);
+                dbResults.forEach(pushFilm);
+            }
+
+            if (!this.retriever) {
+                this.init().catch(() => { });
+            } else {
+                try {
+                    // Vektor qidiruvi ham parallel bajariladi
+                    const nodeGroups = await Promise.all(
+                        searchTerms.map((term) =>
+                            this.retriever.retrieve({ query: term }).catch(() => [])
+                        )
+                    );
+
+                    const candidateIds = new Set();
+                    for (const nodes of nodeGroups) {
+                        for (const n of nodes || []) {
+                            const mId = n.node?.metadata?.id;
+                            if (mId && n.score >= 0.5 && !foundIds.has(mId)) {
+                                candidateIds.add(mId);
                             }
                         }
-                    } catch (e) {
-                        console.error("🤖 [AI]: LlamaIndex xatosi:", e.message);
                     }
-                } else if (!this.retriever) {
-                    this.init().catch(() => { });
+
+                    if (candidateIds.size) {
+                        // N ta alohida findById o'rniga bitta $in so'rovi
+                        const vectorFilms = await FilmModel.find({ _id: { $in: [...candidateIds] } })
+                            .select("name originalName code year")
+                            .lean();
+                        vectorFilms.forEach(pushFilm);
+                    }
+                } catch (e) {
+                    console.error("🤖 [AI]: LlamaIndex xatosi:", e.message);
                 }
             }
 
-            console.log("Yekuniy topilgan filmlar:", foundFilms);
             return foundFilms;
 
         } catch (error) {

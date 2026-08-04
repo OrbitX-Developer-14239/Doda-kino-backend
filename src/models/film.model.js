@@ -2,8 +2,11 @@ import { Schema } from "mongoose";
 import { conn1 } from "../config/db.js";
 
 const FilmSchema = new Schema({
-    name: { type: String, required: true, index: 'text' },
-    originalName: { type: String, required: true, index: 'text' },
+    // Diqqat: bu yerda ilgari ikkala maydonda alohida `index: 'text'` bor edi.
+    // MongoDB bitta kolleksiyada faqat BITTA text indeksga ruxsat beradi, shuning
+    // uchun ikkinchisi har ishga tushishda jimgina xato bilan tugardi.
+    name: { type: String, required: true },
+    originalName: { type: String, required: true },
     description: { type: String, required: true },
     episodesCount: { type: Number, required: true },
     year: { type: Number, required: true },
@@ -27,5 +30,13 @@ const FilmSchema = new Schema({
         videoFileId: { type: Schema.Types.Mixed }
     }]
 }, { timestamps: true });
+
+// Bitta birlashtirilgan text indeks (nomlar bo'yicha qidiruv uchun)
+FilmSchema.index({ name: "text", originalName: "text" });
+
+// Ro'yxat va statistika sahifalari shu tartiblashlarni ishlatadi — indekssiz
+// har so'rov butun kolleksiyani skanerlab, xotirada saralardi.
+FilmSchema.index({ createdAt: -1 });
+FilmSchema.index({ views: -1 });
 
 export const FilmModel = conn1.model("Film", FilmSchema);

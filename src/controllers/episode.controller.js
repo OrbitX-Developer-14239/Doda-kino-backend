@@ -6,7 +6,7 @@ export const EpisodeController = {
         const body = req.body;
 
         const videoLocalPath = req.file?.path;
-        const caption = body.caption || `${body.caption || 'Yangi qism'} #film #dodakino`;
+        const caption = `${body.caption || body.name || 'Yangi qism'} #film #dodakino`;
 
         const data = await EpisodeService.createEpisode(body, videoLocalPath, caption);
 
@@ -32,6 +32,12 @@ export const EpisodeController = {
 
         const data = await EpisodeService.searchByCode(episodeCode);
 
+        res.status(200).json({ success: true, data });
+    }),
+
+    deleteEpisode: catchAsync(async (req, res) => {
+        const { id } = req.params;
+        const data = await EpisodeService.deleteEpisode(id);
         res.status(200).json({ success: true, data });
     }),
 }

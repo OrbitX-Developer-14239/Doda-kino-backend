@@ -3,6 +3,9 @@ import { validate } from "../middlewares/validate.middleware.js";
 import { EpisodeValidation } from "../validations/episode.validation.js";
 import { EpisodeController } from "../controllers/episode.controller.js";
 import { upload } from '../middlewares/upload.middleware.js';
+import { authMiddleware } from "../middlewares/auth.middleware.js";
+import { botOrAdmin } from "../middlewares/access.middleware.js";
+import { uploadLimiter } from "../middlewares/rateLimit.middleware.js";
 
 const router = Router()
 
@@ -75,7 +78,7 @@ const router = Router()
  *       200:
  *         description: Episode created successfully
  */
-router.post("/", upload.single('instagramVideo'), validate(EpisodeValidation), EpisodeController.createEpisode)
+router.post("/", authMiddleware(["superadmin", "admin"]), uploadLimiter, upload.single('instagramVideo'), validate(EpisodeValidation), EpisodeController.createEpisode)
 
 /**
  * @swagger
@@ -93,7 +96,7 @@ router.post("/", upload.single('instagramVideo'), validate(EpisodeValidation), E
  *       200:
  *         description: Episode retrieved successfully
  */
-router.get("/code/:code", EpisodeController.searchByCode)
+router.get("/code/:code", botOrAdmin(["superadmin", "admin"]), EpisodeController.searchByCode)
 
 /**
  * @swagger
@@ -137,6 +140,59 @@ router.get("/code/:code", EpisodeController.searchByCode)
  *       404:
  *         description: Episode not found
  */
-router.put("/:id", EpisodeController.updateEpisode)
+router.put("/:id", authMiddleware(["superadmin", "admin"]), EpisodeController.updateEpisode)
+
+/**
+ * @swagger
+ * /api/episode/{id}:
+ *   delete:
+ *     summary: Delete an episode by ID (or by code)
+ *     description: >
+ *       Epizodni bazadan o'chiradi va filmning `episodes` massivi hamda `episodesCount`
+ *       ni bitta atomik so'rovda yangilaydi.
+ *       `id` o'rniga epizod `code` ini ham berish mumkin (masalan `54001`).
+ *       Diqqat: Telegram kanalidagi video xabar va Instagram Reels o'chirilmaydi.
+ *     tags: [Episodes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Episode `_id` (24 belgili ObjectId) yoki epizod `code` i
+ *         schema:
+ *           type: string
+ *           example: "507f1f77bcf86cd799439011"
+ *     responses:
+ *       200:
+ *         description: Episode deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message:
+ *                       type: string
+ *                       example: "Epizod muvaffaqiyatli o'chirildi"
+ *                     id:
+ *                       type: string
+ *                       example: "507f1f77bcf86cd799439011"
+ *                     code:
+ *                       type: number
+ *                       example: 54001
+ *       400:
+ *         description: Noto'g'ri ID yoki kod formati
+ *       401:
+ *         description: Avtorizatsiya talab qilinadi
+ *       404:
+ *         description: Episode not found
+ */
+router.delete("/:id", authMiddleware(["superadmin", "admin"]), EpisodeController.deleteEpisode)
 
 export default router

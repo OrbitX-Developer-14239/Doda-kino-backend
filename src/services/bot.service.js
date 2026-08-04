@@ -1,9 +1,32 @@
 import { Api } from "grammy";
 import { BotModel } from "../models/bot.model.js";
 
+const CACHE_TTL_MS = 30 * 1000;
+let cachedBot = null;
+let cachedAt = 0;
+
 export const BotService = {
+    /**
+     * Bot hujjati deyarli o'zgarmaydi, lekin u har bot so'rovida kerak bo'ladi.
+     * Qisqa TTL li kesh har chaqiriqdagi ortiqcha DB so'rovini olib tashlaydi.
+     */
+    async getCachedBot() {
+        if (cachedBot && Date.now() - cachedAt < CACHE_TTL_MS) {
+            return cachedBot;
+        }
+
+        cachedBot = await BotModel.findOne().lean();
+        cachedAt = Date.now();
+        return cachedBot;
+    },
+
+    invalidateCache() {
+        cachedBot = null;
+        cachedAt = 0;
+    },
+
     async saveToken(token, username) {
-        if (!token) {
+        if (!token || typeof token !== "string") {
             const error = new Error("Bot tokeni topilmadi!");
             error.status = 400;
             throw error;
@@ -28,15 +51,17 @@ export const BotService = {
         await BotModel.deleteMany({});
         const data = await BotModel.create({ token, botId, username: botUsername });
 
-        return { message: "Bot tokeni saqlandi!", data };
-    },
+        this.invalidateCache();
 
-    async getToken() {
-        return await BotModel.find();
+        // Token hech qachon javobda qaytarilmaydi
+        return {
+            message: "Bot tokeni saqlandi!",
+            data: { _id: data._id, botId: data.botId, username: data.username }
+        };
     },
 
     async getBotInfo() {
-        const bot = await BotModel.findOne();
+        const bot = await this.getCachedBot();
         if (!bot) {
             return null;
         }
@@ -45,5 +70,14 @@ export const BotService = {
             botId: bot.botId,
             username: bot.username
         };
+    },
+
+    /**
+     * Ichki foydalanish uchun (Telegramga media yuborish va h.k.).
+     * HTTP javobiga hech qachon chiqmasligi kerak.
+     */
+    async getTokenInternal() {
+        const bot = await this.getCachedBot();
+        return bot?.token || null;
     }
 };

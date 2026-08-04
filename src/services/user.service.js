@@ -1,26 +1,39 @@
 import { UserModel } from "../models/user.model.js";
 import { ChannelModel } from "../models/channels.model.js";
 
+// Faqat shu maydonlarni yozishga ruxsat (mass assignment ga qarshi)
+const WRITABLE_FIELDS = ["first_name", "username", "channels_condition"];
+
+const buildUpdateDoc = (body) => {
+    const $set = {};
+    for (const key of WRITABLE_FIELDS) {
+        if (body[key] !== undefined) $set[key] = body[key];
+    }
+    return Object.keys($set).length ? { $set } : {};
+};
+
+/**
+ * Filtr qiymati doim string ga keltiriladi.
+ * Aks holda {"telegram_id": {"$ne": null}} kabi tana orqali yuborilgan
+ * operator to'g'ridan-to'g'ri so'rov filtriga tushib ketardi.
+ */
+const byTelegramId = (value) => ({ telegram_id: String(value) });
+
 export const UserService = {
     async createUser(body) {
-        const updateDoc = { $set: {} };
-        for (const [key, value] of Object.entries(body)) {
-            if (value !== undefined) {
-                updateDoc.$set[key] = value;
-            }
-        }
-        
         const data = await UserModel.findOneAndUpdate(
-            { telegram_id: body.telegram_id },
-            updateDoc,
-            { returnDocument: "after", upsert: true }
-        )
+            byTelegramId(body.telegram_id),
+            { ...buildUpdateDoc(body), $setOnInsert: byTelegramId(body.telegram_id) },
+            { returnDocument: "after", upsert: true, runValidators: true }
+        ).lean()
         return data
     },
 
     async updateUser(body) {
         // Avvalgi holatlarini eslab qolish uchun
-        const existingUser = await UserModel.findOne({ telegram_id: body.telegram_id });
+        const existingUser = await UserModel.findOne(byTelegramId(body.telegram_id))
+            .select("channels_condition")
+            .lean();
         let newConditions = body.channels_condition || [];
 
         // Hozirgi aktiv kanallarni olamiz
@@ -71,18 +84,11 @@ export const UserService = {
             body.channels_condition = Array.from(mergedMap.values());
         }
 
-        const updateDoc = { $set: {} };
-        for (const [key, value] of Object.entries(body)) {
-            if (value !== undefined) {
-                updateDoc.$set[key] = value;
-            }
-        }
-
         const data = await UserModel.findOneAndUpdate(
-            { telegram_id: body.telegram_id },
-            updateDoc,
-            { returnDocument: "after", upsert: true }
-        )
+            byTelegramId(body.telegram_id),
+            { ...buildUpdateDoc(body), $setOnInsert: byTelegramId(body.telegram_id) },
+            { returnDocument: "after", upsert: true, runValidators: true }
+        ).lean()
         return data
     },
 
@@ -121,25 +127,30 @@ export const UserService = {
             filter.$and = andConditions;
         }
 
-        const skip = (parseInt(page) - 1) * parseInt(limit);
+        // Limit validatsiya bosqichida 200 bilan cheklangan; bu yerda qo'shimcha himoya.
+        const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
+        const safePage = Math.max(parseInt(page) || 1, 1);
+        const skip = (safePage - 1) * safeLimit;
 
-        const users = await UserModel.find(filter)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(parseInt(limit));
-
-        const totalDocs = await UserModel.countDocuments(filter);
+        const [users, totalDocs] = await Promise.all([
+            UserModel.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(safeLimit)
+                .lean(),
+            UserModel.countDocuments(filter)
+        ]);
 
         return {
             users,
             totalDocs,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(totalDocs / parseInt(limit))
+            page: safePage,
+            limit: safeLimit,
+            totalPages: Math.ceil(totalDocs / safeLimit)
         };
     },
 
     async getUserByTelegramId(telegram_id) {
-        return await UserModel.findOne({ telegram_id });
+        return await UserModel.findOne(byTelegramId(telegram_id)).lean();
     }
 }

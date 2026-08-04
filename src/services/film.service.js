@@ -1,78 +1,79 @@
 import fs from 'fs/promises';
-import { Api, InputFile } from "grammy";
+import { InputFile } from "grammy";
 import { CONFIG } from "../config/index.js";
-import { BotModel } from "../models/bot.model.js";
 import { FilmModel } from "../models/film.model.js";
 import { EpisodeModel } from "../models/episode.model.js";
 import { normalizeMediaId } from "../utils/media.utils.js";
+import { getBotApi } from "../utils/telegram.js";
+import { duplicateKeyError } from "../utils/errors.js";
 
 export const FilmService = {
     async createFilm(body, posterLocalPath) {
-        const { code } = body;
+        // Vaqtinchalik fayl qaysi yo'l bilan chiqmaylik o'chiriladi (orfan fayl qolmasin).
+        try {
+            const { code } = body;
 
-        const excistFilm = await FilmModel.findOne({ code });
-        if (excistFilm) {
-            if (posterLocalPath) await fs.unlink(posterLocalPath).catch(() => { });
-            const error = new Error("Bunday code mavjud, mavjud bo'lmagan code kiriting!");
-            error.status = 409;
-            throw error;
-        }
-
-        let finalPoster = body.posterId ? normalizeMediaId(body.posterId) : null;
-
-        if (posterLocalPath) {
-            const botTokenObj = await BotModel.findOne();
-            if (!botTokenObj || !botTokenObj.token) {
-                await fs.unlink(posterLocalPath).catch(() => { });
-                const error = new Error("Bot token topilmadi!");
-                error.status = 404;
+            const excistFilm = await FilmModel.findOne({ code }).select("_id").lean();
+            if (excistFilm) {
+                const error = new Error("Bunday code mavjud, mavjud bo'lmagan code kiriting!");
+                error.status = 409;
                 throw error;
             }
 
-            try {
-                const botApi = new Api(botTokenObj.token);
-                const targetChannelId = CONFIG.CHANNEL_ID || process.env.CHANNEL_ID;
-                if (!targetChannelId) {
-                    throw new Error("CHANNEL_ID environment o'zgaruvchisi topilmadi!");
+            let finalPoster = body.posterId ? normalizeMediaId(body.posterId) : null;
+
+            if (posterLocalPath) {
+                try {
+                    const botApi = await getBotApi();
+                    const targetChannelId = CONFIG.CHANNEL_ID;
+                    if (!targetChannelId) {
+                        throw new Error("CHANNEL_ID environment o'zgaruvchisi topilmadi!");
+                    }
+
+                    const file = new InputFile(posterLocalPath);
+                    const message = await botApi.sendPhoto(targetChannelId, file);
+
+                    const cleanChannelId = String(message.chat.id).replace("-100", "");
+                    finalPoster = {
+                        channelId: cleanChannelId,
+                        msgId: message.message_id
+                    };
+                } catch (tgError) {
+                    if (tgError.status === 404) throw tgError;
+                    const error = new Error(`Telegramga yuklashda xato: ${tgError.message}`);
+                    error.status = 400;
+                    throw error;
                 }
+            }
 
-                const file = new InputFile(posterLocalPath);
-                const message = await botApi.sendPhoto(targetChannelId, file);
-
-                const cleanChannelId = String(message.chat.id).replace("-100", "");
-                finalPoster = {
-                    channelId: cleanChannelId,
-                    msgId: message.message_id
-                };
-            } catch (tgError) {
-                await fs.unlink(posterLocalPath).catch(() => { });
-                const error = new Error(`Telegramga yuklashda xato: ${tgError.message}`);
+            if (!finalPoster) {
+                const error = new Error("Film poster rasmi majburiy!");
                 error.status = 400;
                 throw error;
             }
+
+            let data;
+            try {
+                data = await FilmModel.create({ ...body, posterId: finalPoster });
+            } catch (err) {
+                throw duplicateKeyError(err, "Bunday code mavjud, mavjud bo'lmagan code kiriting!");
+            }
+
+            import('./ai.service.js').then(({ AIService }) => {
+                AIService.addFilmToIndex(data).catch(() => { });
+            });
+
+            return data;
+        } finally {
+            if (posterLocalPath) {
+                await fs.unlink(posterLocalPath)
+                    .catch((err) => console.error("⚠️ Posterni o'chirishda xato:", err.message));
+            }
         }
-
-        if (!finalPoster) {
-            const error = new Error("Film poster rasmi majburiy!");
-            error.status = 400;
-            throw error;
-        }
-
-        const data = await FilmModel.create({ ...body, posterId: finalPoster });
-
-        if (posterLocalPath) {
-            await fs.unlink(posterLocalPath).catch((err) => console.error("⚠️ Posterni o'chirishda xato:", err.message));
-        }
-
-        import('./ai.service.js').then(({ AIService }) => {
-            AIService.addFilmToIndex(data).catch(() => { });
-        });
-
-        return data;
     },
 
     async updateFilm(id, body) {
-        const film = await FilmModel.findById(id);
+        const film = await FilmModel.findById(id).lean();
         if (!film) {
             const error = new Error("Film topilmadi");
             error.status = 404;
@@ -81,7 +82,7 @@ export const FilmService = {
 
         // If code is being changed, check if it's already used
         if (body.code && Number(body.code) !== film.code) {
-            const exists = await FilmModel.findOne({ code: body.code });
+            const exists = await FilmModel.findOne({ code: Number(body.code) }).select("_id").lean();
             if (exists) {
                 const error = new Error("Bunday code mavjud, boshqa code kiriting!");
                 error.status = 409;
@@ -100,7 +101,12 @@ export const FilmService = {
             episodesCount: body.episodesCount || film.episodesCount
         };
 
-        const updatedFilm = await FilmModel.findByIdAndUpdate(id, updatedData, { new: true });
+        let updatedFilm;
+        try {
+            updatedFilm = await FilmModel.findByIdAndUpdate(id, updatedData, { new: true });
+        } catch (err) {
+            throw duplicateKeyError(err, "Bunday code mavjud, boshqa code kiriting!");
+        }
 
         // Update AI index if needed
         import('./ai.service.js').then(({ AIService }) => {
@@ -111,26 +117,30 @@ export const FilmService = {
     },
 
     async getFilmById(id) {
-        return await FilmModel.findById(id);
+        return await FilmModel.findById(id).lean();
     },
 
     async getAllFilmsPaginated(page = 1) {
         const limit = CONFIG.ITEMS_PER_PAGE || 12;
-        const skip = (page - 1) * limit;
+        const safePage = Math.max(1, Number(page) || 1);
+        const skip = (safePage - 1) * limit;
 
-        const totalFilms = await FilmModel.countDocuments();
+        const [totalFilms, films] = await Promise.all([
+            FilmModel.estimatedDocumentCount(),
+            FilmModel.find()
+                .select("name originalName year code views posterId")
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
         const totalPages = Math.ceil(totalFilms / limit);
-
-        const films = await FilmModel.find()
-            .select("name originalName year code views posterId")
-            .skip(skip)
-            .limit(limit)
-            .sort({ createdAt: -1 });
 
         return {
             films,
             pagination: {
-                currentPage: page,
+                currentPage: safePage,
                 totalPages,
                 totalFilms
             }
@@ -138,15 +148,35 @@ export const FilmService = {
     },
 
     async searchByCode(code) {
-        return await FilmModel.findOne({ code });
+        return await FilmModel.findOne({ code }).lean();
     },
 
-    async searchByName(name) {
-        const safeName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const regex = new RegExp(safeName, "i");
+    async searchByName(name, limit = 20) {
+        return await this.searchByNames([name], limit);
+    },
+
+    /**
+     * Bir nechta qidiruv so'zini BITTA so'rovda qidiradi.
+     * Ilgari AI xizmati har bir so'z uchun alohida so'rov yuborardi (20+ ta to'liq skanerlash).
+     */
+    async searchByNames(names, limit = 60) {
+        const patterns = (Array.isArray(names) ? names : [names])
+            .map((n) => String(n || "").trim())
+            .filter((n) => n.length >= 2)
+            .slice(0, 30)
+            .map((n) => new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+
+        if (!patterns.length) return [];
+
         return await FilmModel.find({
-            $or: [{ name: regex }, { originalName: regex }]
-        }).select("name originalName id code year");
+            $or: [
+                { name: { $in: patterns } },
+                { originalName: { $in: patterns } }
+            ]
+        })
+            .select("name originalName code year")
+            .limit(limit)
+            .lean();
     },
 
     async deleteFilm(id) {

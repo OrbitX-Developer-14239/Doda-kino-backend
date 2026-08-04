@@ -1,5 +1,14 @@
 import { Router } from "express";
 import { userController } from "../controllers/user.controller.js";
+import { validate } from "../middlewares/validate.middleware.js";
+import { authMiddleware } from "../middlewares/auth.middleware.js";
+import { botOrAdmin } from "../middlewares/access.middleware.js";
+import {
+    createUserValidation,
+    updateUserValidation,
+    listUsersValidation,
+    getUserByTelegramIdValidation,
+} from "../validations/user.validation.js";
 
 const router = Router()
 
@@ -10,8 +19,8 @@ const router = Router()
  *   description: User management
  */
 
-router.post("/", userController.createUser)
-router.put("/", userController.updateUser)
+router.post("/", botOrAdmin(["superadmin", "admin"]), validate(createUserValidation), userController.createUser)
+router.put("/", botOrAdmin(["superadmin", "admin"]), validate(updateUserValidation), userController.updateUser)
 
 /**
  * @swagger
@@ -19,6 +28,8 @@ router.put("/", userController.updateUser)
  *   get:
  *     summary: Get all users
  *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: page
@@ -28,6 +39,7 @@ router.put("/", userController.updateUser)
  *         name: limit
  *         schema:
  *           type: integer
+ *           maximum: 200
  *       - in: query
  *         name: is_subscribed
  *         schema:
@@ -42,7 +54,7 @@ router.put("/", userController.updateUser)
  *       200:
  *         description: List of users
  */
-router.get("/", userController.getUsers)
+router.get("/", authMiddleware(["superadmin", "admin"]), validate(listUsersValidation), userController.getUsers)
 
 /**
  * @swagger
@@ -50,6 +62,8 @@ router.get("/", userController.getUsers)
  *   get:
  *     summary: Get a single user by telegram_id
  *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: telegram_id
@@ -63,6 +77,6 @@ router.get("/", userController.getUsers)
  *       404:
  *         description: User not found
  */
-router.get("/:telegram_id", userController.getUserByTelegramId)
+router.get("/:telegram_id", botOrAdmin(["superadmin", "admin"]), validate(getUserByTelegramIdValidation), userController.getUserByTelegramId)
 
 export default router

@@ -11,10 +11,13 @@ class SocketTransport extends TransportStream {
     log(info, callback) {
         setImmediate(() => {
             this.emit("logged", info);
-            import("../socket.js").then(({ getIo }) => {
+            import("../socket.js").then(({ getIo, LOG_ROOM }) => {
                 const io = getIo();
                 if (io) {
-                    io.emit("new-log", info);
+                    // Faqat autentifikatsiyadan o'tgan adminlar xonasiga.
+                    // Ilgari io.emit() bilan HAR BIR ulangan klientga yuborilardi —
+                    // anonim foydalanuvchi ham stack trace larni o'qiy olardi.
+                    io.to(LOG_ROOM).emit("new-log", info);
                 }
             }).catch(() => { });
         });
@@ -45,7 +48,9 @@ export const logger = winston.createLogger({
             )
         }),
         new winston.transports.MongoDB({
-            level: "info",
+            // "info" da har bir log qatori haqiqiy so'rovlar bilan bir xil klasterga
+            // yozuv qilardi. Bazaga faqat ogohlantirish va xatolar tushadi.
+            level: "warn",
             db: CONFIG.MONGO_URI2,
             collection: "server_logs",
             expireAfterSeconds: 72 * 60 * 60,

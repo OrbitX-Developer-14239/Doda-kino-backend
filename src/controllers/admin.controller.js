@@ -1,5 +1,6 @@
 import { AdminService } from "../services/admin.service.js";
 import { catchAsync } from "../utils/catchAsync.js";
+import { CONFIG } from "../config/index.js";
 
 export const AdminController = {
     login: catchAsync(async (req, res) => {
@@ -11,7 +12,9 @@ export const AdminController = {
 
         res.cookie('refreshToken', data.refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
+            secure: CONFIG.IS_PRODUCTION,
+            sameSite: CONFIG.IS_PRODUCTION ? "none" : "lax",
+            path: "/api/admin",
             maxAge: 15 * 24 * 60 * 60 * 1000
         });
 
@@ -33,8 +36,10 @@ export const AdminController = {
         if (data.refreshToken) {
             res.cookie('refreshToken', data.refreshToken, {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === "production",
-                maxAge: 15 * 24 * 60 * 60 * 1000
+            secure: CONFIG.IS_PRODUCTION,
+            sameSite: CONFIG.IS_PRODUCTION ? "none" : "lax",
+            path: "/api/admin",
+            maxAge: 15 * 24 * 60 * 60 * 1000
             });
             delete data.refreshToken;
         }
@@ -96,7 +101,9 @@ export const AdminController = {
 
         res.cookie('refreshToken', data.refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
+            secure: CONFIG.IS_PRODUCTION,
+            sameSite: CONFIG.IS_PRODUCTION ? "none" : "lax",
+            path: "/api/admin",
             maxAge: 15 * 24 * 60 * 60 * 1000
         });
 
@@ -125,7 +132,7 @@ export const AdminController = {
     }),
 
     logout: catchAsync(async (req, res) => {
-        res.clearCookie('refreshToken');
+        res.clearCookie('refreshToken', { path: '/api/admin' });
         const data = await AdminService.logout(req.admin._id);
         res.status(200).json({ success: true, data }); 
     }),

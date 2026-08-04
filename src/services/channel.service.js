@@ -1,18 +1,10 @@
-import { Api } from "grammy"
 import { ChannelModel } from "../models/channels.model.js"
-import { BotModel } from "../models/bot.model.js"
 import { UserModel } from "../models/user.model.js"
+import { getBotApi } from "../utils/telegram.js"
 
 export const ChannelService = {
     async checkStatus(channelId) {
-        const botToken = await BotModel.findOne();
-        if (!botToken || !botToken.token) {
-            const error = new Error("Bot token topilmadi!");
-            error.status = 404;
-            throw error;
-        }
-
-        const botApi = new Api(botToken.token);
+        const botApi = await getBotApi();
 
         try {
             const botInfo = await botApi.getMe();
@@ -55,14 +47,7 @@ export const ChannelService = {
     },
 
     async generateInviteLink(channelId, joinType = "request") {
-        const botToken = await BotModel.findOne();
-        if (!botToken || !botToken.token) {
-            const error = new Error("Bot token topilmadi!");
-            error.status = 404;
-            throw error;
-        }
-
-        const botApi = new Api(botToken.token);
+        const botApi = await getBotApi();
         const createsJoinRequest = joinType === "request";
 
         try {
@@ -128,7 +113,7 @@ export const ChannelService = {
     },
 
     async getChannels() {
-        const channels = await ChannelModel.find()
+        const channels = await ChannelModel.find().lean()
 
         return channels
     },
@@ -142,52 +127,61 @@ export const ChannelService = {
             throw error;
         }
 
-        const botToken = await BotModel.findOne();
-        if (!botToken || !botToken.token) {
-            const error = new Error("Bot token topilmadi!");
-            error.status = 404;
-            throw error;
-        }
-
-        const botApi = new Api(botToken.token);
         const channelTid = existChannel.telegram_id;
 
-        let telegramMemberCount = 0;
-        try {
-            telegramMemberCount = await botApi.getChatMemberCount(channelTid);
-        } catch (e) {
-            console.error("Failed to get chat member count:", e.message);
-        }
-
-        const trackedUsers = await UserModel.find({
-            "channels_condition.telegram_id": channelTid
-        }).select("telegram_id");
-
-        const SUBSCRIBED = ["member", "creator", "administrator"];
-        let joinedActive = 0;
-        let joinedLeft = 0;
-
-        const checkPromises = trackedUsers.map(async (user) => {
-            try {
-                const member = await botApi.getChatMember(channelTid, Number(user.telegram_id));
-                if (SUBSCRIBED.includes(member.status)) {
-                    joinedActive++;
-                } else {
-                    joinedLeft++;
+        // Telegramdan faqat bitta yig'ma so'rov. Obuna holati esa bazadagi
+        // channels_condition dan hisoblanadi — ilgari bu yerda har bir foydalanuvchi
+        // uchun alohida getChatMember chaqirilardi va bu Telegram limitiga urilardi.
+        const [telegramMemberCount, aggregated] = await Promise.all([
+            (async () => {
+                try {
+                    const botApi = await getBotApi();
+                    return await botApi.getChatMemberCount(channelTid);
+                } catch (e) {
+                    console.error("Failed to get chat member count:", e.message);
+                    return 0;
                 }
-            } catch (e) {
-                joinedLeft++;
-            }
-        });
+            })(),
+            UserModel.aggregate([
+                { $match: { "channels_condition.telegram_id": channelTid } },
+                {
+                    $project: {
+                        entry: {
+                            $arrayElemAt: [
+                                {
+                                    $filter: {
+                                        input: { $ifNull: ["$channels_condition", []] },
+                                        as: "c",
+                                        cond: { $eq: ["$$c.telegram_id", channelTid] }
+                                    }
+                                },
+                                0
+                            ]
+                        }
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        tracked: { $sum: 1 },
+                        joined: { $sum: { $cond: [{ $eq: ["$entry.has_joined", true] }, 1, 0] } },
+                        active: { $sum: { $cond: [{ $eq: ["$entry.is_member", true] }, 1, 0] } }
+                    }
+                }
+            ])
+        ]);
 
-        await Promise.allSettled(checkPromises);
+        const stats = aggregated[0] || { tracked: 0, joined: 0, active: 0 };
+        const joinedViaBot = stats.joined || 0;
 
         return {
             ...existChannel.toObject(),
             statistics: {
                 total_members: telegramMemberCount,
-                joined_via_bot: joinedActive + joinedLeft,
-                left_via_bot: joinedLeft
+                tracked_users: stats.tracked || 0,
+                joined_via_bot: joinedViaBot,
+                active_members: stats.active || 0,
+                left_via_bot: Math.max(0, joinedViaBot - (stats.active || 0))
             }
         };
     },

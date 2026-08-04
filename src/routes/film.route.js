@@ -3,6 +3,9 @@ import { FilmController } from "../controllers/film.controller.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { filmValidation } from "../validations/film.validation.js";
 import { upload } from "../middlewares/upload.middleware.js";
+import { authMiddleware } from "../middlewares/auth.middleware.js";
+import { botOrAdmin } from "../middlewares/access.middleware.js";
+import { searchLimiter, uploadLimiter } from "../middlewares/rateLimit.middleware.js";
 
 const router = Router()
 
@@ -23,7 +26,7 @@ const router = Router()
  *       200:
  *         description: List of films
  */
-router.get("/", FilmController.getFilmsList)
+router.get("/", botOrAdmin(["superadmin", "admin"]), FilmController.getFilmsList)
 
 /**
  * @swagger
@@ -41,7 +44,7 @@ router.get("/", FilmController.getFilmsList)
  *       200:
  *         description: Responds with film details
  */
-router.get("/code/:code", FilmController.searchByCode)
+router.get("/code/:code", botOrAdmin(["superadmin", "admin"]), FilmController.searchByCode)
 
 /**
  * @swagger
@@ -61,7 +64,7 @@ router.get("/code/:code", FilmController.searchByCode)
  *       404:
  *         description: Film not found
  */
-router.get("/id/:id", FilmController.getFilmById)
+router.get("/id/:id", botOrAdmin(["superadmin", "admin"]), FilmController.getFilmById)
 
 /**
  * @swagger
@@ -84,7 +87,7 @@ router.get("/id/:id", FilmController.getFilmById)
  *       200:
  *         description: Matches found by AI
  */
-router.post("/search", FilmController.searchByAi)
+router.post("/search", searchLimiter, botOrAdmin(["superadmin", "admin"]), FilmController.searchByAi)
 
 /**
  * @swagger
@@ -141,7 +144,7 @@ router.post("/search", FilmController.searchByAi)
  *       200:
  *         description: Film created
  */
-router.post("/", upload.single('poster'), validate(filmValidation), FilmController.createFilm)
+router.post("/", authMiddleware(["superadmin", "admin"]), uploadLimiter, upload.single('poster'), validate(filmValidation), FilmController.createFilm)
 
 /**
  * @swagger
@@ -162,7 +165,7 @@ router.post("/", upload.single('poster'), validate(filmValidation), FilmControll
  *       404:
  *         description: Film not found
  */
-router.delete("/:id", FilmController.deleteFilm)
+router.delete("/:id", authMiddleware(["superadmin", "admin"]), FilmController.deleteFilm)
 
 /**
  * @swagger
@@ -208,6 +211,6 @@ router.delete("/:id", FilmController.deleteFilm)
  *       404:
  *         description: Film not found
  */
-router.put("/:id", FilmController.updateFilm)
+router.put("/:id", authMiddleware(["superadmin", "admin"]), FilmController.updateFilm)
 
 export default router

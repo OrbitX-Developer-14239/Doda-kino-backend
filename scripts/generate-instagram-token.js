@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { CONFIG } from '../config/index.js';
+import { CONFIG } from '../src/config/index.js';
 
 async function generateLongLivedToken() {
     const { META_APP_ID, META_APP_SECRET, INSTAGRAM_TEMP_ACCESS_TOKEN } = CONFIG

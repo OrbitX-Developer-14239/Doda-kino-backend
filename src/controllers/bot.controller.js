@@ -8,12 +8,6 @@ export const BotController = {
         res.status(201).json({ success: true, data })
     }),
 
-    getToken: catchAsync(async (req, res) => {
-        const data = await BotService.getToken()
-
-        res.status(200).json(data)
-    }),
-
     getInfo: catchAsync(async (req, res) => {
         const data = await BotService.getBotInfo()
 

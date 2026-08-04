@@ -1,3 +1,20 @@
+/**
+ * Zod sxemasi bo'yicha so'rovni tekshiradi va TOZALANGAN qiymatlarni qaytarib qo'yadi.
+ *
+ * Express 5 da `req.query` — prototipdagi getter, shuning uchun unga oddiy
+ * `Object.assign(req.query, ...)` hech qanday ta'sir qilmaydi (qiymat jimgina
+ * yo'qoladi). Shu sababli bu yerda `defineProperty` bilan ustidan yoziladi —
+ * aks holda validatsiya coercion va strip natijalari controllerga yetib bormaydi.
+ */
+const overrideRequestProperty = (req, key, value) => {
+    Object.defineProperty(req, key, {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true
+    });
+};
+
 export const validate = (schema) =>
     (req, res, next) => {
         try {
@@ -6,9 +23,11 @@ export const validate = (schema) =>
                 query: req.query,
                 params: req.params
             });
-            req.body = validated.body;
-            if (validated.query) Object.assign(req.query, validated.query);
-            if (validated.params) Object.assign(req.params, validated.params);
+
+            if (validated.body !== undefined) req.body = validated.body;
+            if (validated.query !== undefined) overrideRequestProperty(req, "query", validated.query);
+            if (validated.params !== undefined) overrideRequestProperty(req, "params", validated.params);
+
             next()
         } catch (error) {
             if (error.name === 'ZodError') {

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { StatisticsController } from "../controllers/statistics.controller.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
+import { botOrAdmin } from "../middlewares/access.middleware.js";
 
 const router = Router();
 
@@ -11,7 +12,7 @@ const router = Router();
  *   description: Filmlar va epizodlar statistikasi
  */
 
-router.post("/view", StatisticsController.addView);
+router.post("/view", botOrAdmin(["superadmin", "admin"]), StatisticsController.addView);
 
 /**
  * @swagger
@@ -32,7 +33,7 @@ router.post("/view", StatisticsController.addView);
  *       200:
  *         description: Barcha film va epizodlar ro'yxati (pagination bilan)
  */
-router.get("/", StatisticsController.getAll);
+router.get("/", authMiddleware(["superadmin", "admin"]), StatisticsController.getAll);
 
 /**
  * @swagger
@@ -59,6 +60,6 @@ router.get("/", StatisticsController.getAll);
  *       200:
  *         description: Eng ko'p ko'rilganlar ro'yxati (pagination bilan)
  */
-router.get("/top", StatisticsController.getTop);
+router.get("/top", authMiddleware(["superadmin", "admin"]), StatisticsController.getTop);
 
 export default router;

@@ -17,7 +17,7 @@ export const StatisticsService = {
 
     async getAll(page = 1, limit = 20) {
         const skip = (page - 1) * limit;
-        const totalFilms = await FilmModel.countDocuments();
+        const totalFilms = await FilmModel.estimatedDocumentCount();
 
         const films = await FilmModel.find()
             .sort({ createdAt: -1 })
@@ -27,7 +27,8 @@ export const StatisticsService = {
             .populate({
                 path: "episodes.episodeId",
                 select: "name code views"
-            });
+            })
+            .lean();
 
         const formattedFilms = films.map(f => ({
             _id: f._id,
@@ -73,7 +74,8 @@ export const StatisticsService = {
             .populate({
                 path: "episodes.episodeId",
                 select: "name code views"
-            });
+            })
+            .lean();
 
         const formattedTopFilms = topFilms.map(f => ({
             _id: f._id,

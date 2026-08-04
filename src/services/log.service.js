@@ -7,7 +7,9 @@ export const LogService = {
         let filter = {};
 
         if (time) {
-            const parsedTime = parseInt(time.replace('h', ''));
+            // Express bir xil parametr ikki marta kelsa massiv qaytaradi —
+            // String() ga o'tkazilmasa .replace TypeError bilan 500 berardi.
+            const parsedTime = parseInt(String(time).replace('h', ''));
             if (!isNaN(parsedTime)) {
                 const sinceDate = new Date(Date.now() - parsedTime * 60 * 60 * 1000);
                 filter.timestamp = { $gte: sinceDate };
@@ -15,28 +17,32 @@ export const LogService = {
         }
 
         if (level) {
-            const levels = level.split(',').map(l => l.trim().toLowerCase());
-            filter.level = { $in: levels };
+            const levels = String(level).split(',').map(l => l.trim().toLowerCase()).filter(Boolean);
+            if (levels.length) filter.level = { $in: levels };
         }
 
         if (source) {
-            filter['meta.source'] = source;
+            filter['meta.source'] = String(source);
         }
 
-        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
+        const safePage = Math.max(parseInt(page) || 1, 1);
+        const skip = (safePage - 1) * safeLimit;
 
-        const logs = await LogModel.find(filter)
-            .sort({ timestamp: -1 })
-            .skip(skip)
-            .limit(parseInt(limit));
-
-        const totalDocs = await LogModel.countDocuments(filter);
+        const [logs, totalDocs] = await Promise.all([
+            LogModel.find(filter)
+                .sort({ timestamp: -1 })
+                .skip(skip)
+                .limit(safeLimit)
+                .lean(),
+            LogModel.countDocuments(filter)
+        ]);
 
         return {
             logs,
             totalDocs,
-            page: parseInt(page),
-            limit: parseInt(limit)
+            page: safePage,
+            limit: safeLimit
         };
     }
 };

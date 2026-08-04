@@ -29,4 +29,8 @@ export const EpisodeSchema = new Schema({
     editVideos: [EditVideoSchema]
 }, { timestamps: true });
 
+// Film o'chirilganda `deleteMany({ filmId })` va qism ro'yxatlari shu maydondan foydalanadi
+EpisodeSchema.index({ filmId: 1, episodeNumber: 1 });
+EpisodeSchema.index({ views: -1 });
+
 export const EpisodeModel = conn1.model("Episode", EpisodeSchema);

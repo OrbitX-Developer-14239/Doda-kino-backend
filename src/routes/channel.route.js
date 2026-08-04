@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { ChannelController } from "../controllers/channel.controller.js";
+import { authMiddleware } from "../middlewares/auth.middleware.js";
+import { botOrAdmin } from "../middlewares/access.middleware.js";
 
 const router = Router()
 
@@ -44,7 +46,7 @@ const router = Router()
  *       201:
  *         description: Channel created successfully
  */
-router.post("/", ChannelController.createChannel)
+router.post("/", authMiddleware(["superadmin", "admin"]), ChannelController.createChannel)
 
 /**
  * @swagger
@@ -56,7 +58,7 @@ router.post("/", ChannelController.createChannel)
  *       200:
  *         description: A list of channels
  */
-router.get("/", ChannelController.getChannels)
+router.get("/", botOrAdmin(["superadmin", "admin"]), ChannelController.getChannels)
 
 /**
  * @swagger
@@ -76,7 +78,7 @@ router.get("/", ChannelController.getChannels)
  *       404:
  *         description: Channel not found
  */
-router.get("/:id", ChannelController.getChannelById)
+router.get("/:id", authMiddleware(["superadmin", "admin"]), ChannelController.getChannelById)
 
 /**
  * @swagger
@@ -110,7 +112,7 @@ router.get("/:id", ChannelController.getChannelById)
  *       200:
  *         description: Channel updated successfully
  */
-router.put("/:id", ChannelController.updateChannel)
+router.put("/:id", authMiddleware(["superadmin", "admin"]), ChannelController.updateChannel)
 
 /**
  * @swagger
@@ -128,6 +130,6 @@ router.put("/:id", ChannelController.updateChannel)
  *       200:
  *         description: Channel deleted successfully
  */
-router.delete("/:id", ChannelController.deleteChannel)
+router.delete("/:id", authMiddleware(["superadmin", "admin"]), ChannelController.deleteChannel)
 
 export default router
