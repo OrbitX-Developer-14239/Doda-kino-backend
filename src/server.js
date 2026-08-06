@@ -40,6 +40,13 @@ const startServer = async () => {
 
         server.listen(CONFIG.PORT, () => {
             logger.info(`Server running on http://localhost:${CONFIG.PORT}`);
+
+            // Amaldagi CORS sozlamasi loglarga chiqadi. pm2 muhit o'zgaruvchilarini
+            // keshlaydi va dotenv mavjud qiymatlarni ustidan yozmaydi — shu sababli
+            // .env tahrirlangani bilan eski ro'yxat ishlab turishi mumkin.
+            // Bu qator qaysi ro'yxat HAQIQATDA kuchda ekanini darhol ko'rsatadi.
+            logger.info(`CORS ruxsat etilgan manbalar: ${CONFIG.CORS_ORIGINS.join(", ") || "(bo'sh)"}`);
+            logger.info(`CORS localhost (istalgan port): ${CONFIG.CORS_ALLOW_LOCALHOST ? "yoqilgan" : "o'chirilgan"}`);
         });
 
         AIService.init().catch((error) => {

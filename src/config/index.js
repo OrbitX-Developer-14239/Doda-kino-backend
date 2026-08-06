@@ -40,6 +40,10 @@ export const CONFIG = {
     ENABLE_SWAGGER: process.env.ENABLE_SWAGGER === "true",
     SWAGGER_USER: process.env.SWAGGER_USER || "docs",
     SWAGGER_PASSWORD: process.env.SWAGGER_PASSWORD,
+
+    // VAQTINCHA: true bo'lsa /api-docs login/parol so'ramaydi va butunlay ochiq
+    // qoladi. Ishlatib bo'lgach .env dan olib tashlang.
+    SWAGGER_NO_AUTH: process.env.SWAGGER_NO_AUTH === "true",
 }
 
 CONFIG.IS_PRODUCTION = CONFIG.NODE_ENV === "production";

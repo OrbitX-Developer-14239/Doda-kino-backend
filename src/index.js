@@ -113,7 +113,13 @@ if (!CONFIG.IS_PRODUCTION || CONFIG.ENABLE_SWAGGER) {
 
     // Production da Basic auth bilan yopiladi (brauzer login oynasini chiqaradi).
     // Lokalda hech qanday to'siqsiz ochiladi.
-    const swaggerGuard = CONFIG.IS_PRODUCTION
+    // SWAGGER_NO_AUTH=true bo'lsa production da ham parol so'ralmaydi — bu vaqtinchalik
+    // kalit, yoqilgan paytda /api-docs internetdagi hammaga ochiq bo'ladi.
+    if (CONFIG.IS_PRODUCTION && CONFIG.SWAGGER_NO_AUTH) {
+        console.warn("[XAVFSIZLIK] SWAGGER_NO_AUTH=true — /api-docs parolsiz ochiq. Ishlatib bo'lgach .env dan olib tashlang.");
+    }
+
+    const swaggerGuard = CONFIG.IS_PRODUCTION && !CONFIG.SWAGGER_NO_AUTH
         ? [basicAuth({
             user: CONFIG.SWAGGER_USER,
             password: CONFIG.SWAGGER_PASSWORD,
