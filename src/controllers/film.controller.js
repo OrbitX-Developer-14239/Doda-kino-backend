@@ -15,8 +15,9 @@ export const FilmController = {
     updateFilm: catchAsync(async (req, res) => {
         const { id } = req.params;
         const body = req.body;
-        
-        const data = await FilmService.updateFilm(id, body);
+
+        const posterLocalPath = req.file?.path;
+        const data = await FilmService.updateFilm(id, body, posterLocalPath);
         res.status(200).json({ success: true, data });
     }),
 

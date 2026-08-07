@@ -15,7 +15,8 @@ export const filmValidation = z.object({
             return Array.isArray(val) ? val : val ? [val] : [];
         }, z.array(z.string())).optional(),
         description: z.string().trim().min(10, "Kengroq ta'rif bering"),
-        episodesCount: z.coerce.number().int().min(1, "Kamida 1 qism bo'lishi kerak"),
+        // episodesCount ataylab yo'q: u qo'lda kiritilmaydi, epizod qo'shilgan/o'chirilgan
+        // sayin avtomatik hisoblanadi (episode.service.js dagi $inc).
         posterId: z.preprocess(val => {
             if (typeof val === 'string') {
                 try { return JSON.parse(val); } catch (e) { return val; }

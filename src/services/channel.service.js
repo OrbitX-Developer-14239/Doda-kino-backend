@@ -2,6 +2,19 @@ import { ChannelModel } from "../models/channels.model.js"
 import { UserModel } from "../models/user.model.js"
 import { getBotApi } from "../utils/telegram.js"
 
+// Kanallar ro'yxati botning ENG issiq yo'li — har xabarda so'raladi, lekin
+// o'zi juda kam o'zgaradi. Qisqa TTL kesh har so'rovdagi ~60ms lik Atlas
+// safarini olib tashlaydi. Yaratish/tahrirlash/o'chirish shu jarayonning
+// o'zida keshni darhol tozalaydi, shuning uchun eskirgan ma'lumot ko'rinmaydi.
+const CHANNELS_CACHE_TTL_MS = 30 * 1000;
+let cachedChannels = null;
+let channelsCachedAt = 0;
+
+const invalidateChannelsCache = () => {
+    cachedChannels = null;
+    channelsCachedAt = 0;
+};
+
 export const ChannelService = {
     async checkStatus(channelId) {
         const botApi = await getBotApi();
@@ -109,13 +122,18 @@ export const ChannelService = {
             bot_permissions: status
         });
 
+        invalidateChannelsCache();
         return data;
     },
 
     async getChannels() {
-        const channels = await ChannelModel.find().lean()
+        if (cachedChannels && Date.now() - channelsCachedAt < CHANNELS_CACHE_TTL_MS) {
+            return cachedChannels;
+        }
 
-        return channels
+        cachedChannels = await ChannelModel.find().lean();
+        channelsCachedAt = Date.now();
+        return cachedChannels;
     },
 
     async getChannelById(id) {
@@ -220,6 +238,7 @@ export const ChannelService = {
         existChannel.bot_permissions = status;
 
         await existChannel.save();
+        invalidateChannelsCache();
         return existChannel;
     },
 
@@ -233,6 +252,7 @@ export const ChannelService = {
         }
 
         await ChannelModel.deleteOne({ _id: id })
+        invalidateChannelsCache();
         return true
     }
 }

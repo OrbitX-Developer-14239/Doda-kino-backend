@@ -1,5 +1,5 @@
 import { UserModel } from "../models/user.model.js";
-import { ChannelModel } from "../models/channels.model.js";
+import { ChannelService } from "./channel.service.js";
 
 // Faqat shu maydonlarni yozishga ruxsat (mass assignment ga qarshi)
 const WRITABLE_FIELDS = ["first_name", "username", "channels_condition"];
@@ -30,14 +30,16 @@ export const UserService = {
     },
 
     async updateUser(body) {
-        // Avvalgi holatlarini eslab qolish uchun
-        const existingUser = await UserModel.findOne(byTelegramId(body.telegram_id))
-            .select("channels_condition")
-            .lean();
+        // Bot bu metodni har xabarda chaqiradi. Ilgari 3 ta KETMA-KET Atlas so'rovi
+        // bor edi (~190ms). Endi: ikkala o'qish parallel, kanallar esa keshdan
+        // (odatda 0 ta qo'shimcha so'rov) — jami ~1 ta DB safari.
+        const [existingUser, activeChannels] = await Promise.all([
+            UserModel.findOne(byTelegramId(body.telegram_id))
+                .select("channels_condition")
+                .lean(),
+            ChannelService.getChannels()
+        ]);
         let newConditions = body.channels_condition || [];
-
-        // Hozirgi aktiv kanallarni olamiz
-        const activeChannels = await ChannelModel.find({}, { telegram_id: 1, name: 1 }).lean();
         const activeIds = new Set();
 
         const mergedMap = new Map();

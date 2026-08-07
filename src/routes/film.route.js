@@ -9,6 +9,11 @@ import { searchLimiter, uploadLimiter } from "../middlewares/rateLimit.middlewar
 
 const router = Router()
 
+// Tahrirlashda rasm ixtiyoriy: cheklov faqat fayl yuborilgan (multipart) so'rovga
+// qo'llanadi, oddiy matn tahriri (JSON) ilgarigidek cheklovsiz qoladi.
+const uploadLimiterIfFile = (req, res, next) =>
+    req.is("multipart/form-data") ? uploadLimiter(req, res, next) : next();
+
 /**
  * @swagger
  * tags:
@@ -101,7 +106,7 @@ router.post("/search", searchLimiter, botOrAdmin(["superadmin", "admin"]), FilmC
  *         multipart/form-data:
  *           schema:
  *             type: object
- *             required: [code, name, originalName, year, country, description, episodesCount]
+ *             required: [code, name, originalName, year, country, description]
  *             properties:
  *               poster:
  *                 type: string
@@ -137,9 +142,6 @@ router.post("/search", searchLimiter, botOrAdmin(["superadmin", "admin"]), FilmC
  *                   msgId:
  *                     type: integer
  *                     example: 4
- *               episodesCount:
- *                 type: integer
- *                 example: 12
  *     responses:
  *       200:
  *         description: Film created
@@ -171,7 +173,10 @@ router.delete("/:id", authMiddleware(["superadmin", "admin"]), FilmController.de
  * @swagger
  * /api/film/{id}:
  *   put:
- *     summary: Update a film's text data
+ *     summary: Update a film (text data and/or poster image)
+ *     description: >
+ *       Yangi rasm yuklash uchun multipart/form-data da `poster` fayli yuboriladi.
+ *       Rasm yuborilmasa eski poster o'zgarishsiz qoladi.
  *     tags: [Films]
  *     parameters:
  *       - in: path
@@ -183,6 +188,30 @@ router.delete("/:id", authMiddleware(["superadmin", "admin"]), FilmController.de
  *     requestBody:
  *       required: true
  *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               poster:
+ *                 type: string
+ *                 format: binary
+ *                 description: Yangi poster rasmi (.jpg, .png, .webp, .gif)
+ *               code:
+ *                 type: integer
+ *               name:
+ *                 type: string
+ *               originalName:
+ *                 type: string
+ *               year:
+ *                 type: integer
+ *               country:
+ *                 type: string
+ *               genres:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               description:
+ *                 type: string
  *         application/json:
  *           schema:
  *             type: object
@@ -203,14 +232,22 @@ router.delete("/:id", authMiddleware(["superadmin", "admin"]), FilmController.de
  *                   type: string
  *               description:
  *                 type: string
- *               episodesCount:
- *                 type: integer
+ *               posterId:
+ *                 type: object
+ *                 description: Telegramga allaqachon yuklangan rasmni bog'lash uchun
+ *                 properties:
+ *                   channelId:
+ *                     type: string
+ *                     example: "3831468244"
+ *                   msgId:
+ *                     type: integer
+ *                     example: 4
  *     responses:
  *       200:
  *         description: Film updated successfully
  *       404:
  *         description: Film not found
  */
-router.put("/:id", authMiddleware(["superadmin", "admin"]), FilmController.updateFilm)
+router.put("/:id", authMiddleware(["superadmin", "admin"]), uploadLimiterIfFile, upload.single('poster'), FilmController.updateFilm)
 
 export default router

@@ -7,6 +7,33 @@ import { normalizeMediaId } from "../utils/media.utils.js";
 import { getBotApi } from "../utils/telegram.js";
 import { duplicateKeyError } from "../utils/errors.js";
 
+/**
+ * Posterni Telegram kanaliga yuklab, bazaga saqlanadigan { channelId, msgId } ni qaytaradi.
+ * createFilm va updateFilm bir xil yo'ldan foydalanadi.
+ */
+async function uploadPosterToTelegram(posterLocalPath) {
+    try {
+        const botApi = await getBotApi();
+        const targetChannelId = CONFIG.CHANNEL_ID;
+        if (!targetChannelId) {
+            throw new Error("CHANNEL_ID environment o'zgaruvchisi topilmadi!");
+        }
+
+        const file = new InputFile(posterLocalPath);
+        const message = await botApi.sendPhoto(targetChannelId, file);
+
+        return {
+            channelId: String(message.chat.id).replace("-100", ""),
+            msgId: message.message_id
+        };
+    } catch (tgError) {
+        if (tgError.status === 404) throw tgError;
+        const error = new Error(`Telegramga yuklashda xato: ${tgError.message}`);
+        error.status = 400;
+        throw error;
+    }
+}
+
 export const FilmService = {
     async createFilm(body, posterLocalPath) {
         // Vaqtinchalik fayl qaysi yo'l bilan chiqmaylik o'chiriladi (orfan fayl qolmasin).
@@ -23,27 +50,7 @@ export const FilmService = {
             let finalPoster = body.posterId ? normalizeMediaId(body.posterId) : null;
 
             if (posterLocalPath) {
-                try {
-                    const botApi = await getBotApi();
-                    const targetChannelId = CONFIG.CHANNEL_ID;
-                    if (!targetChannelId) {
-                        throw new Error("CHANNEL_ID environment o'zgaruvchisi topilmadi!");
-                    }
-
-                    const file = new InputFile(posterLocalPath);
-                    const message = await botApi.sendPhoto(targetChannelId, file);
-
-                    const cleanChannelId = String(message.chat.id).replace("-100", "");
-                    finalPoster = {
-                        channelId: cleanChannelId,
-                        msgId: message.message_id
-                    };
-                } catch (tgError) {
-                    if (tgError.status === 404) throw tgError;
-                    const error = new Error(`Telegramga yuklashda xato: ${tgError.message}`);
-                    error.status = 400;
-                    throw error;
-                }
+                finalPoster = await uploadPosterToTelegram(posterLocalPath);
             }
 
             if (!finalPoster) {
@@ -54,7 +61,10 @@ export const FilmService = {
 
             let data;
             try {
-                data = await FilmModel.create({ ...body, posterId: finalPoster });
+                // episodesCount har doim 0 dan boshlanadi — yangi filmda hali epizod yo'q.
+                // Tashqaridan kelgan qiymat e'tiborga olinmaydi, aks holda epizod
+                // qo'shilganda ustiga qo'shilib ketardi.
+                data = await FilmModel.create({ ...body, posterId: finalPoster, episodesCount: 0 });
             } catch (err) {
                 throw duplicateKeyError(err, "Bunday code mavjud, mavjud bo'lmagan code kiriting!");
             }
@@ -72,48 +82,66 @@ export const FilmService = {
         }
     },
 
-    async updateFilm(id, body) {
-        const film = await FilmModel.findById(id).lean();
-        if (!film) {
-            const error = new Error("Film topilmadi");
-            error.status = 404;
-            throw error;
-        }
-
-        // If code is being changed, check if it's already used
-        if (body.code && Number(body.code) !== film.code) {
-            const exists = await FilmModel.findOne({ code: Number(body.code) }).select("_id").lean();
-            if (exists) {
-                const error = new Error("Bunday code mavjud, boshqa code kiriting!");
-                error.status = 409;
+    async updateFilm(id, body, posterLocalPath) {
+        // Vaqtinchalik fayl qaysi yo'l bilan chiqmaylik o'chiriladi (orfan fayl qolmasin).
+        try {
+            const film = await FilmModel.findById(id).lean();
+            if (!film) {
+                const error = new Error("Film topilmadi");
+                error.status = 404;
                 throw error;
             }
+
+            // If code is being changed, check if it's already used
+            if (body.code && Number(body.code) !== film.code) {
+                const exists = await FilmModel.findOne({ code: Number(body.code) }).select("_id").lean();
+                if (exists) {
+                    const error = new Error("Bunday code mavjud, boshqa code kiriting!");
+                    error.status = 409;
+                    throw error;
+                }
+            }
+
+            const updatedData = {
+                name: body.name || film.name,
+                originalName: body.originalName || film.originalName,
+                description: body.description || film.description,
+                year: body.year || film.year,
+                country: body.country || film.country,
+                genres: body.genres && body.genres.length > 0 ? body.genres : film.genres,
+                code: body.code ? Number(body.code) : film.code
+                // episodesCount ataylab tegilmaydi — u epizodlar bo'yicha avtomatik yuritiladi.
+            };
+
+            // Poster: yangi fayl yuborilsa Telegramga yuklanadi, aks holda tayyor
+            // posterId qabul qilinadi. Ikkalasi ham bo'lmasa eski rasm o'zgarmaydi.
+            const newPoster = posterLocalPath
+                ? await uploadPosterToTelegram(posterLocalPath)
+                : (body.posterId ? normalizeMediaId(body.posterId) : null);
+
+            if (newPoster) {
+                updatedData.posterId = newPoster;
+            }
+
+            let updatedFilm;
+            try {
+                updatedFilm = await FilmModel.findByIdAndUpdate(id, updatedData, { returnDocument: "after" });
+            } catch (err) {
+                throw duplicateKeyError(err, "Bunday code mavjud, boshqa code kiriting!");
+            }
+
+            // Update AI index if needed
+            import('./ai.service.js').then(({ AIService }) => {
+                AIService.addFilmToIndex(updatedFilm).catch(() => { });
+            });
+
+            return updatedFilm;
+        } finally {
+            if (posterLocalPath) {
+                await fs.unlink(posterLocalPath)
+                    .catch((err) => console.error("⚠️ Posterni o'chirishda xato:", err.message));
+            }
         }
-
-        const updatedData = {
-            name: body.name || film.name,
-            originalName: body.originalName || film.originalName,
-            description: body.description || film.description,
-            year: body.year || film.year,
-            country: body.country || film.country,
-            genres: body.genres && body.genres.length > 0 ? body.genres : film.genres,
-            code: body.code ? Number(body.code) : film.code,
-            episodesCount: body.episodesCount || film.episodesCount
-        };
-
-        let updatedFilm;
-        try {
-            updatedFilm = await FilmModel.findByIdAndUpdate(id, updatedData, { returnDocument: "after" });
-        } catch (err) {
-            throw duplicateKeyError(err, "Bunday code mavjud, boshqa code kiriting!");
-        }
-
-        // Update AI index if needed
-        import('./ai.service.js').then(({ AIService }) => {
-            AIService.addFilmToIndex(updatedFilm).catch(() => { });
-        });
-
-        return updatedFilm;
     },
 
     async getFilmById(id) {

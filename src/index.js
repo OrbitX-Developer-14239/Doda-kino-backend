@@ -127,7 +127,17 @@ if (!CONFIG.IS_PRODUCTION || CONFIG.ENABLE_SWAGGER) {
         })]
         : [];
 
-    app.use("/api-docs", ...swaggerGuard, swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+    // Swagger UI ning katta statik fayllari (bundle ~1.5MB) brauzerda 1 kun
+    // keshlanadi — har ochilishda qayta yuklanmaydi. index.html ataylab
+    // keshlanmaydi: spec o'zgarsa yangilanish darhol ko'rinishi kerak.
+    const swaggerStaticCache = (req, res, next) => {
+        if (/\.(js|css|png|svg|map)$/.test(req.path)) {
+            res.set("Cache-Control", "public, max-age=86400");
+        }
+        next();
+    };
+
+    app.use("/api-docs", ...swaggerGuard, swaggerStaticCache, swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 }
 
 app.use("/api/film", filmsRouter)

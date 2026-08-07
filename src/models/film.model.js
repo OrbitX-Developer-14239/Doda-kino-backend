@@ -8,7 +8,8 @@ const FilmSchema = new Schema({
     name: { type: String, required: true },
     originalName: { type: String, required: true },
     description: { type: String, required: true },
-    episodesCount: { type: Number, required: true },
+    // Qo'lda kiritilmaydi — epizod qo'shilganda/o'chirilganda avtomatik yangilanadi.
+    episodesCount: { type: Number, default: 0 },
     year: { type: Number, required: true },
     country: { type: String, required: true },
     genres: [{ type: String, required: true }],
