@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate.middleware.js";
-import { EpisodeValidation } from "../validations/episode.validation.js";
+import { EpisodeValidation, episodeAiSuggestValidation } from "../validations/episode.validation.js";
 import { EpisodeController } from "../controllers/episode.controller.js";
 import { upload } from '../middlewares/upload.middleware.js';
 import { authMiddleware } from "../middlewares/auth.middleware.js";
 import { botOrAdmin } from "../middlewares/access.middleware.js";
-import { uploadLimiter } from "../middlewares/rateLimit.middleware.js";
+import { uploadLimiter, searchLimiter } from "../middlewares/rateLimit.middleware.js";
 
 const router = Router()
 
@@ -97,6 +97,80 @@ router.post("/", authMiddleware(["superadmin", "admin"]), uploadLimiter, upload.
  *         description: Episode retrieved successfully
  */
 router.get("/code/:code", botOrAdmin(["superadmin", "admin"]), EpisodeController.searchByCode)
+
+/**
+ * @swagger
+ * /api/episode/ai-suggest:
+ *   post:
+ *     summary: AI orqali qism ma'lumotlarini tayyorlash (bazaga yozmaydi)
+ *     description: >
+ *       Serial qismi uchun Groq (openai/gpt-oss-120b) yordamida nom va o'zbekcha
+ *       tavsif tayyorlaydi hamda bazada BAND BO'LMAGAN qism kodi (>= 100) tanlaydi.
+ *       `filmId` berilsa serial nomi, yili va davlati bazadan olinadi;
+ *       aks holda `filmName` yozilishi shart.
+ *     tags: [Episodes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               filmId:
+ *                 type: string
+ *                 description: Mavjud film `_id` si (filmName o'rniga)
+ *                 example: "6a75ddaeddd3a114627a0ee1"
+ *               filmName:
+ *                 type: string
+ *                 description: filmId berilmasa MAJBURIY
+ *                 example: "Breaking Bad"
+ *               episodeNumber:
+ *                 type: integer
+ *                 example: 1
+ *               count:
+ *                 type: integer
+ *                 description: Nechta bo'sh kod kerak (default 1)
+ *                 example: 3
+ *     responses:
+ *       200:
+ *         description: Tayyorlangan ma'lumot
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     episode:
+ *                       type: object
+ *                       properties:
+ *                         found: { type: boolean }
+ *                         name: { type: string, example: "1-qism" }
+ *                         description: { type: string }
+ *                         episodeNumber: { type: integer, example: 1 }
+ *                         code: { type: integer, example: 1814 }
+ *                     codes:
+ *                       type: array
+ *                       items: { type: integer }
+ *                       example: [1814, 1815, 1816]
+ *       400:
+ *         description: filmId ham, filmName ham berilmagan
+ *       404:
+ *         description: Film topilmadi
+ *       502:
+ *         description: AI xizmatidan javob olinmadi
+ */
+router.post(
+    "/ai-suggest",
+    searchLimiter,
+    authMiddleware(["superadmin", "admin"]),
+    validate(episodeAiSuggestValidation),
+    EpisodeController.aiSuggest
+)
 
 /**
  * @swagger

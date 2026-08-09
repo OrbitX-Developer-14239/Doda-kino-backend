@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { FilmController } from "../controllers/film.controller.js";
 import { validate } from "../middlewares/validate.middleware.js";
-import { filmValidation } from "../validations/film.validation.js";
+import { filmValidation, filmAiSuggestValidation } from "../validations/film.validation.js";
 import { upload } from "../middlewares/upload.middleware.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
 import { botOrAdmin } from "../middlewares/access.middleware.js";
@@ -93,6 +93,84 @@ router.get("/id/:id", botOrAdmin(["superadmin", "admin"]), FilmController.getFil
  *         description: Matches found by AI
  */
 router.post("/search", searchLimiter, botOrAdmin(["superadmin", "admin"]), FilmController.searchByAi)
+
+/**
+ * @swagger
+ * /api/film/ai-suggest:
+ *   post:
+ *     summary: AI orqali kino ma'lumotlarini tayyorlash (bazaga yozmaydi)
+ *     description: >
+ *       Kino nomidan Groq (openai/gpt-oss-120b) yordamida to'liq ma'lumot tayyorlaydi:
+ *       o'zbekcha nom, xalqaro nom, yil, davlat, janrlar va o'zbekcha tavsif.
+ *       Shu bilan birga bazada BAND BO'LMAGAN film kodi (>= 50000) va
+ *       kerakli miqdorda epizod kodi (>= 100) tanlab beradi.
+ *       Bu endpoint hech narsa saqlamaydi — natija forma to'ldirish uchun.
+ *     tags: [Films]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Kino nomi (MAJBURIY)
+ *                 example: "Batalion"
+ *               year:
+ *                 type: integer
+ *                 description: Ixtiyoriy — bir xil nomli kinolarni ajratish uchun
+ *                 example: 2015
+ *               country:
+ *                 type: string
+ *                 description: Ixtiyoriy
+ *                 example: "Rossiya"
+ *               episodeCount:
+ *                 type: integer
+ *                 description: Nechta qism uchun bo'sh kod kerak (default 1)
+ *                 example: 1
+ *     responses:
+ *       200:
+ *         description: Tayyorlangan ma'lumot
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     film:
+ *                       type: object
+ *                       properties:
+ *                         found: { type: boolean, example: true, description: "AI kinoni aniq tanidimi" }
+ *                         name: { type: string, example: "Batalion" }
+ *                         originalName: { type: string, example: "Battalion" }
+ *                         year: { type: integer, example: 2015 }
+ *                         country: { type: string, example: "Rossiya" }
+ *                         genres: { type: array, items: { type: string }, example: ["Harbiy", "Drama", "Tarixiy"] }
+ *                         description: { type: string }
+ *                         code: { type: integer, example: 89050, description: "Bo'sh film kodi" }
+ *                     episodeCodes:
+ *                       type: array
+ *                       items: { type: integer }
+ *                       example: [1814]
+ *       400:
+ *         description: Nom berilmagan
+ *       502:
+ *         description: AI xizmatidan javob olinmadi
+ */
+router.post(
+    "/ai-suggest",
+    searchLimiter,
+    authMiddleware(["superadmin", "admin"]),
+    validate(filmAiSuggestValidation),
+    FilmController.aiSuggest
+)
 
 /**
  * @swagger

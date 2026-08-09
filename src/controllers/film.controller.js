@@ -1,8 +1,33 @@
 import { AIService } from "../services/ai.service.js";
+import { AIMetadataService } from "../services/ai-metadata.service.js";
+import { CodeService } from "../services/code.service.js";
 import { FilmService } from "../services/film.service.js";
 import { catchAsync } from "../utils/catchAsync.js";
 
 export const FilmController = {
+    /**
+     * Kino nomidan AI yordamida to'ldirilgan ma'lumot + bo'sh kod qaytaradi.
+     * Bazaga HECH NARSA yozmaydi — bu faqat forma uchun taklif.
+     */
+    aiSuggest: catchAsync(async (req, res) => {
+        const { name, year, country, episodeCount = 1 } = req.body;
+
+        // AI chaqiruvi va kod tanlash bir-biriga bog'liq emas — parallel ketadi
+        const [film, [filmCode], episodeCodes] = await Promise.all([
+            AIMetadataService.suggestFilm({ name, year, country }),
+            CodeService.nextFilmCodes(1),
+            CodeService.nextEpisodeCodes(episodeCount),
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                film: { ...film, code: filmCode },
+                episodeCodes,
+            },
+        });
+    }),
+
     createFilm: catchAsync(async (req, res) => {
         const body = req.body
 

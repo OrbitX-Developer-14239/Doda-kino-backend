@@ -1,5 +1,20 @@
 import z from "zod";
 
+/**
+ * AI taklifi uchun: faqat NOM majburiy.
+ * Yil va davlat ixtiyoriy — ular bir xil nomli kinolarni ajratishga yordam beradi
+ * (masalan bir nechta "Battalion" bor).
+ */
+export const filmAiSuggestValidation = z.object({
+    body: z.object({
+        name: z.string().trim().min(1, "Kino nomi majburiy").max(200),
+        year: z.coerce.number().int().min(1800).max(new Date().getFullYear()).optional(),
+        country: z.string().trim().min(2).max(100).optional(),
+        // Nechta qism uchun bo'sh kod kerakligi
+        episodeCount: z.coerce.number().int().min(1).max(200).default(1),
+    })
+});
+
 export const filmValidation = z.object({
     body: z.object({
         code: z.coerce.number().int().min(50000, "Kodingiz 50000 dan kichik bo'lishi mumkin emas"),

@@ -10,6 +10,22 @@ const editVideoValidation = z.object({
     }).optional()
 });
 
+/**
+ * Qism uchun AI taklifi. `filmId` berilsa serial ma'lumoti bazadan olinadi,
+ * bo'lmasa `filmName` yozilishi kerak (ikkalasidan biri majburiy).
+ */
+export const episodeAiSuggestValidation = z.object({
+    body: z.object({
+        filmId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Noto'g'ri Film ID formati").optional(),
+        filmName: z.string().trim().min(1).max(200).optional(),
+        episodeNumber: z.coerce.number().int().min(1).default(1),
+        count: z.coerce.number().int().min(1).max(200).default(1),
+    }).refine((b) => b.filmId || b.filmName, {
+        message: "filmId yoki filmName berilishi shart",
+        path: ["filmName"],
+    })
+});
+
 export const EpisodeValidation = z.object({
     body: z.object({
         filmId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Noto'g'ri Film ID formati (Mongoose ObjectId bo'lishi shart)"),
