@@ -156,7 +156,9 @@ export const FilmService = {
         const [totalFilms, films] = await Promise.all([
             FilmModel.estimatedDocumentCount(),
             FilmModel.find()
-                .select("name originalName year code views posterId")
+                // episodesCount ham kerak: admin paneldagi "Qismlar" ustuni shundan
+                // o'qiydi. U tanlanmagani uchun ro'yxatda hamma film "0 ta" ko'rinardi.
+                .select("name originalName year code views posterId episodesCount")
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
