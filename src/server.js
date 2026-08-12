@@ -5,6 +5,7 @@ import { connectDB, conn1, conn2 } from "./config/db.js";
 import { AdminService } from "./services/admin.service.js";
 import { AIService } from "./services/ai.service.js";
 import { initSocket, closeSocket } from "./socket.js";
+import { cache } from "./services/cache.service.js";
 import { logger } from "./utils/logger.js";
 
 let server;
@@ -21,6 +22,7 @@ const shutdown = async (signal) => {
     try {
         if (server) await new Promise((resolve) => server.close(resolve));
         await closeSocket();
+        await cache.disconnect();
         await Promise.all([conn1.close(), conn2.close()]);
         logger.info("Barcha ulanishlar yopildi. Xayr!");
         process.exit(0);
@@ -34,6 +36,10 @@ const startServer = async () => {
     try {
         await connectDB();
         await AdminService.initSuperAdmin();
+
+        // Kesh bekor qilish uchun (yozish emas). Redis o'chiq bo'lsa
+        // server baribir ishga tushadi — invalidatsiya jimgina o'tkaziladi.
+        await cache.connect();
 
         server = http.createServer(app);
         initSocket(server);

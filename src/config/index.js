@@ -29,6 +29,10 @@ export const CONFIG = {
     SUPERADMIN_USERNAME: process.env.SUPERADMIN_USERNAME || "superadmin",
     SUPERADMIN_PASSWORD: process.env.SUPERADMIN_PASSWORD,
 
+    // Bot bilan BIR XIL Redis bo'lishi shart — backend faqat kesh bekor qilish
+    // uchun ulanadi. Berilmasa invalidatsiya jimgina o'chadi (server ishlayveradi).
+    REDIS_URL: process.env.REDIS_URL || "redis://127.0.0.1:6379",
+
     ADMIN_PANEL_URL: process.env.ADMIN_PANEL_URL || "http://127.0.0.1:3000",
     CORS_ORIGINS: parseList(process.env.CORS_ORIGINS),
 

@@ -6,6 +6,7 @@ import { EpisodeModel } from "../models/episode.model.js";
 import { normalizeMediaId } from "../utils/media.utils.js";
 import { getBotApi } from "../utils/telegram.js";
 import { duplicateKeyError } from "../utils/errors.js";
+import { cache } from "./cache.service.js";
 
 /**
  * Posterni Telegram kanaliga yuklab, bazaga saqlanadigan { channelId, msgId } ni qaytaradi.
@@ -73,6 +74,9 @@ export const FilmService = {
                 AIService.addFilmToIndex(data).catch(() => { });
             });
 
+            // Yangi film qo'shildi — ro'yxat va qidiruv keshi eskirdi
+            await cache.invalidateFilm(data.toObject?.() ?? data);
+
             return data;
         } finally {
             if (posterLocalPath) {
@@ -134,6 +138,10 @@ export const FilmService = {
             import('./ai.service.js').then(({ AIService }) => {
                 AIService.addFilmToIndex(updatedFilm).catch(() => { });
             });
+
+            // Eski VA yangi holat bo'yicha bekor qilamiz: kod yoki nom
+            // o'zgargan bo'lsa eski kalit ham qolib ketmasligi kerak.
+            await cache.invalidateFilm(film, updatedFilm?.toObject?.() ?? updatedFilm);
 
             return updatedFilm;
         } finally {
@@ -230,6 +238,10 @@ export const FilmService = {
 
         // Delete the film document
         await FilmModel.findByIdAndDelete(film._id);
+
+        // Film ham, uning barcha qismlari ham keshdan chiqarilishi kerak —
+        // aks holda bot o'chirilgan filmni TTL tugagunicha ko'rsatib turadi.
+        await cache.invalidateFilm(film.toObject?.() ?? film);
 
         return {
             message: "Film va unga tegishli barcha epizodlar muvaffaqiyatli o'chirildi",

@@ -7,13 +7,15 @@ import { InstagramService } from "./instagram.service.js";
 import { normalizeMediaId } from "../utils/media.utils.js";
 import { getBotApi } from "../utils/telegram.js";
 import { duplicateKeyError } from "../utils/errors.js";
+import { cache } from "./cache.service.js";
 
 export const EpisodeService = {
     async createEpisode(body, videoLocalPath, caption) {
         const { code, filmId } = body;
 
+        // code va name kesh kalitlarini bekor qilish uchun kerak
         const film = await FilmModel.findById(filmId)
-            .select("_id description year country genres")
+            .select("_id code name description year country genres")
             .lean();
         if (!film) {
             if (videoLocalPath) await fs.unlink(videoLocalPath).catch(() => { });
@@ -104,6 +106,9 @@ export const EpisodeService = {
             this._publishToInstagram(episode._id, videoLocalPath, caption).catch(() => { });
         }
 
+        // Film keshi ham eskiradi: uning ichida qismlar nusxasi va episodesCount bor
+        await cache.invalidateEpisode(episode.toObject?.() ?? episode, null, film.code, film.name);
+
         return episode;
     },
 
@@ -186,6 +191,16 @@ export const EpisodeService = {
             }
         );
 
+        const film = await FilmModel.findById(updatedEpisode.filmId).select("code name").lean();
+
+        // Eski va yangi holat bo'yicha: kod/nom o'zgargan bo'lsa eski kalit ham ketsin
+        await cache.invalidateEpisode(
+            episode,
+            updatedEpisode.toObject?.() ?? updatedEpisode,
+            film?.code,
+            film?.name
+        );
+
         return updatedEpisode;
     },
 
@@ -207,7 +222,8 @@ export const EpisodeService = {
             throw error;
         }
 
-        const episode = await EpisodeModel.findOne(query).select("_id filmId code").lean();
+        // name ham kerak: kesh kalitini o'chirish uchun
+        const episode = await EpisodeModel.findOne(query).select("_id filmId code name").lean();
         if (!episode) {
             const error = new Error("Epizod topilmadi");
             error.status = 404;
@@ -223,6 +239,9 @@ export const EpisodeService = {
         );
 
         await EpisodeModel.deleteOne({ _id: episode._id });
+
+        const film = await FilmModel.findById(episode.filmId).select("code name").lean();
+        await cache.invalidateEpisode(episode, null, film?.code, film?.name);
 
         return {
             message: "Epizod muvaffaqiyatli o'chirildi",
