@@ -11,6 +11,12 @@ const SNAPSHOT = path.resolve(__dirname, "../storage/search-index.json");
  *  Xotiradagi film qidiruv indeksi
  * ============================================
  *
+ * FAQAT NOM bo'yicha qidiradi (name + originalName). Tavsif, janr va davlat
+ * ATAYLAB indeksga kiritilmaydi: sinovlar ko'rsatdiki, tavsif so'zlari
+ * bo'yicha moslik uzun tasviriy so'rovlarda aloqasiz filmlarni qaytaradi
+ * ("superqahramon" tasviriga 12 ta begona film chiqqan edi). Tasviriy
+ * so'rovlarni Groq nomga aylantiradi, keyin o'sha nomlar shu yerdan qidiriladi.
+ *
  * NEGA BAZADAN EMAS:
  *   1) Atlas uzoqda (Singapur) — har qidiruv ~300 ms tarmoq safari.
  *      Xotirada bu ~0.1 ms.
@@ -37,57 +43,31 @@ export const normalize = (text) =>
 
 const tokenize = (text) => normalize(text).split(" ").filter((w) => w.length >= 2);
 
-// Qidiruvda ma'no bermaydigan so'zlar — ular bo'yicha moslik hisoblanmaydi
+// Qidiruvda ma'no bermaydigan so'zlar — ular bo'yicha moslik hisoblanmaydi.
+// "matematik haqida film" -> faqat "matematik" nomlardan qidiriladi.
 const STOP_WORDS = new Set([
     "film", "filmi", "kino", "kinosi", "serial", "seriali", "haqida",
     "the", "a", "an", "of", "and", "va", "yoki", "bir", "eng",
 ]);
 
-let entries = [];      // { code, name, originalName, year, country, nName, nOriginal, words }
+let entries = [];      // { code, name, originalName, year, nName, nOriginal, words }
 let ready = false;
-
-// "koreys" -> "koreya" kabi keng tarqalgan shakllar. O'zbekchada to'liq
-// morfologiya qilish og'ir, shuning uchun eng ko'p uchraydigan bir nechtasi.
-const SYNONYMS = {
-    koreys: "koreya", korea: "koreya", koreyscha: "koreya",
-    rus: "rossiya", ruscha: "rossiya",
-    turk: "turkiya", turkcha: "turkiya",
-    amerika: "aqsh", amerikacha: "aqsh", usa: "aqsh",
-    hind: "hindiston", hindcha: "hindiston",
-    yapon: "yaponiya", xitoy: "xitoy",
-};
-
-const expand = (word) => SYNONYMS[word] || word;
 
 const toEntry = (f) => {
     const nName = normalize(f.name);
     const nOriginal = normalize(f.originalName);
 
-    // Nom so'zlari — asosiy moslik shu bo'yicha
     const nameWords = [...nName.split(" "), ...nOriginal.split(" ")]
         .filter((w) => w.length >= 2);
-
-    // Tavsif, janr va davlat — "urush haqida ayollar filmi" kabi MAZMUNIY
-    // so'rovlar uchun. Nomga qaraganda pastroq ball beriladi.
-    const contextWords = [
-        ...normalize(f.country).split(" "),
-        ...normalize((f.genres || []).join(" ")).split(" "),
-        ...normalize(f.description).split(" "),
-    ].filter((w) => w.length >= 3);
 
     return {
         code: f.code,
         name: f.name,
         originalName: f.originalName,
         year: f.year,
-        country: f.country || "",
-        // Nusxaga yozish uchun saqlanadi (qidiruvda to'g'ridan-to'g'ri ishlatilmaydi)
-        description: f.description || "",
-        genres: f.genres || [],
         nName,
         nOriginal,
         words: new Set(nameWords),
-        context: new Set(contextWords),
     };
 };
 
@@ -97,10 +77,8 @@ export const SearchIndex = {
 
     /** Bazadan to'liq qayta quradi */
     async rebuild() {
-        // description va genres ham kerak — mazmuniy qidiruv ("urush haqida
-        // ayollar filmi") aynan shular bo'yicha ishlaydi.
         const films = await FilmModel.find()
-            .select("code name originalName year country description genres")
+            .select("code name originalName year")
             .lean();
 
         entries = films.map(toEntry);
@@ -136,12 +114,9 @@ export const SearchIndex = {
     async _saveSnapshot() {
         const payload = {
             updatedAt: new Date().toISOString(),
-            // Mazmuniy so'zlar ham saqlanadi, aks holda nusxadan tiklanganda
-            // "urush haqida ayollar filmi" kabi so'rovlar ishlamay qolardi.
             films: entries.map((e) => ({
                 code: e.code, name: e.name, originalName: e.originalName,
-                year: e.year, country: e.country,
-                description: e.description, genres: e.genres,
+                year: e.year,
             })),
         };
         await fs.mkdir(path.dirname(SNAPSHOT), { recursive: true });
@@ -166,8 +141,8 @@ export const SearchIndex = {
     // ── Qidiruv ─────────────────────────────────────────────────────────────
 
     /**
-     * Bitta so'rov bo'yicha qidiradi va ballab qaytaradi.
-     * Ball: to'liq moslik > boshlanishi > barcha so'zlar > qism-satr > ba'zi so'zlar
+     * Bitta so'rov bo'yicha NOMLARDAN qidiradi va ballab qaytaradi.
+     * Ball: to'liq moslik > boshlanishi > qism-satr > so'z qamrovi
      */
     search(query, limit = 12) {
         if (!ready) return [];
@@ -191,39 +166,33 @@ export const SearchIndex = {
             }
 
             if (qWords.length) {
-                // Aniq so'z mosligi: "odam" so'rovi "Shimol odami" ga MOS KELMAYDI
-                const exact = qWords.filter((w) => e.words.has(w)).length;
-                if (exact) {
-                    score = Math.max(score, exact === qWords.length
-                        ? 55
-                        : Math.round((exact / qWords.length) * 40));
-                }
-
-                // So'z BOSHIDAN moslik: "matematik" -> "Matematik mo'jizalar".
-                // Ataylab `includes` emas — u "odam" ni "odami", "Shimol odami" ga
-                // ham moslab, keraksiz natijalar berardi.
+                // So'rovdagi qaysi so'zlar film NOMIDA bor?
+                // Aniq moslik: "odam" so'rovi "Shimol odami" ga MOS KELMAYDI.
+                // Prefiks moslik: "matematik" -> "Matematik mo'jizalar".
+                // Ataylab `includes` emas — u "odam" ni "odami" ga ham moslab,
+                // keraksiz natijalar berardi.
+                let nameHits = 0;
                 for (const w of qWords) {
-                    if (w.length < 5) continue;
-                    const prefixHit = [...e.words].some((ew) => ew.startsWith(w) || w.startsWith(ew));
-                    if (prefixHit) score = Math.max(score, 45);
+                    if (e.words.has(w)) { nameHits++; continue; }
+                    if (w.length >= 5 &&
+                        [...e.words].some((ew) => ew.startsWith(w) || w.startsWith(ew))) {
+                        nameHits++;
+                    }
                 }
 
-                // Mazmuniy moslik (tavsif/janr/davlat) — nomdan pastroq ball.
-                // Ko'p so'z mos kelsa ishonch ortadi, bittasi tasodif bo'lishi mumkin.
+                // QAMROV muhim, mutlaq son emas.
                 //
-                // Prefiks bilan solishtiriladi, chunki o'zbekchada qo'shimchalar ko'p:
-                // so'rovdagi "urush" tavsifdagi "urushining" ga mos kelishi kerak.
-                const ctxHits = qWords.filter((w) => {
-                    const target = expand(w);
-                    if (e.context.has(target)) return true;
-                    if (target.length < 4) return false;
-                    for (const cw of e.context) {
-                        if (cw.startsWith(target)) return true;
+                // 12 so'zli tasvirda bitta "hujum" so'zi "Titanlar hujumi" ga
+                // mos kelgani film TOPILDI degani emas — qamrov past bo'lsa
+                // moslik hisoblanmaydi va so'rov Groq'ga o'tadi.
+                if (nameHits) {
+                    const coverage = nameHits / qWords.length;
+                    if (coverage === 1) {
+                        score = Math.max(score, 55);
+                    } else if (coverage >= 0.5) {
+                        score = Math.max(score, Math.round(coverage * 50));
                     }
-                    return false;
-                }).length;
-                if (ctxHits >= 2) score = Math.max(score, 30 + ctxHits * 3);
-                else if (ctxHits === 1 && qWords.length === 1) score = Math.max(score, 25);
+                }
             }
 
             if (score > 0) scored.push({ e, score });

@@ -7,7 +7,13 @@ const groq = new Groq({ apiKey: CONFIG.GROQ_API_KEY });
 // Diqqat: bu model javobdan oldin "reasoning" tokenlarini sarflaydi.
 // max_tokens past bo'lsa javob BUTUNLAY bo'sh qaytadi.
 const MODEL = "openai/gpt-oss-120b";
-const MAX_TOKENS = 1000;
+
+// O'lchangan: uzun tasviriy so'rovda "reasoning" ~700-860 token yeydi.
+// 1000 limitida javobga 140 token qolib, model tez-tez BO'SH qaytarardi —
+// aynan shu sababli "yerda superqahramonlar bo'ladi..." kabi so'rovlarga
+// Groq hech narsa bermay, foydalanuvchi tavsif bo'yicha topilgan aloqasiz
+// natijalarni ko'rardi. 3000 da o'ylash uchun ham, javob uchun ham yetarli.
+const MAX_TOKENS = 3000;
 
 const SYSTEM_PROMPT = `Sen yordamchi emassan, sen toza Data filter qiluvchi scriptsan.
 QOIDALAR:
@@ -22,10 +28,13 @@ QOIDALAR:
 export const FilmSearchService = {
     /**
      * Ikki bosqichli qidiruv:
-     *   1) Xotiradagi indeks — tez (~1 ms), tarmoqsiz, o'zbekcha apostroflarni
-     *      hisobga oladi. Ko'pchilik so'rov shu yerda tugaydi.
-     *   2) Topilmasa Groq — foydalanuvchi tasvirini kino nomlariga aylantiradi,
-     *      keyin o'sha nomlar yana indeksdan qidiriladi.
+     *   1) Xotiradagi indeks — FAQAT NOM bo'yicha (~1 ms, tarmoqsiz,
+     *      o'zbekcha apostroflarni hisobga oladi). Nom yozgan foydalanuvchi
+     *      shu yerda javob oladi.
+     *   2) Nom topilmasa bu TASVIR — Groq uni kino nomlariga aylantiradi,
+     *      keyin o'sha nomlar yana indeksdan qidiriladi. Tavsif indeksda
+     *      umuman yo'q: tavsif so'zlari bo'yicha moslik aloqasiz natijalar
+     *      berardi (sinovda 12 ta begona film chiqqan).
      *
      * Vektor qidiruv ATAYLAB ishlatilmaydi (`ai.service.js` da turibdi):
      * o'lchov ko'rsatdiki, u 10 ta so'rovdan 1 tasida natija qo'shdi va
@@ -37,6 +46,7 @@ export const FilmSearchService = {
             return { films: strip(direct), source: "index" };
         }
 
+        // Nomlardan topilmadi -> bu tasvir. Groq nomga aylantiradi.
         const predicted = await this._askGroq(query);
         if (!predicted.length) {
             return { films: [], source: "groq-empty" };
