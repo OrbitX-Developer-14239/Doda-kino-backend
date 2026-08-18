@@ -53,12 +53,13 @@ const STOP_WORDS = new Set([
 let entries = [];      // { code, name, originalName, year, nName, nOriginal, words }
 let ready = false;
 
+/** Sarlavhaning ma'noli so'zlari (stop-so'zlarsiz) */
+const titleWords = (nTitle) =>
+    nTitle.split(" ").filter((w) => w.length >= 2 && !STOP_WORDS.has(w));
+
 const toEntry = (f) => {
     const nName = normalize(f.name);
     const nOriginal = normalize(f.originalName);
-
-    const nameWords = [...nName.split(" "), ...nOriginal.split(" ")]
-        .filter((w) => w.length >= 2);
 
     return {
         code: f.code,
@@ -67,9 +68,18 @@ const toEntry = (f) => {
         year: f.year,
         nName,
         nOriginal,
-        words: new Set(nameWords),
+        // Ikkalasi ALOHIDA: moslik "o'zbekcha nom" yoki "asl nom" ning
+        // BIRIGA to'liq mos kelishi kerak. Ilgari ular bitta to'plamga
+        // qo'shilardi va "Qasoskorlar"+"Avengers" aralashib ketardi.
+        nameWords: titleWords(nName),
+        origWords: titleWords(nOriginal),
     };
 };
+
+/** "matematik" <-> "matematikaning". Qisqa so'zlar uchun faqat aniq moslik. */
+const wordMatches = (a, b) =>
+    a === b ||
+    (a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a)));
 
 export const SearchIndex = {
     get size() { return entries.length; },
@@ -166,47 +176,52 @@ export const SearchIndex = {
             }
 
             if (qWords.length) {
-                // So'rovdagi qaysi so'zlar film NOMIDA bor?
-                // Aniq moslik: "odam" so'rovi "Shimol odami" ga MOS KELMAYDI.
-                // Prefiks moslik: "matematik" -> "Matematik mo'jizalar".
-                // Ataylab `includes` emas — u "odam" ni "odami" ga ham moslab,
-                // keraksiz natijalar berardi.
-                let nameHits = 0;
-                for (const w of qWords) {
-                    if (e.words.has(w)) { nameHits++; continue; }
-                    // Prefiks moslik o'zbekcha qo'shimchalar uchun:
-                    // "matematik" <-> "matematikaning".
-                    //
-                    // IKKALA so'z ham uzun bo'lishi SHART. Aks holda nomdagi
-                    // qisqa so'z ("In Our Prime" dagi "in") istalgan uzun
-                    // so'rovga yopishardi: "Interstellar" so'rovi "in" orqali
-                    // "Matematik mo'jizalar" va "Alice in Wonderland" ni ham
-                    // qaytarardi.
-                    if (w.length < 5) continue;
-                    for (const ew of e.words) {
-                        if (ew.length < 5) continue;
-                        if (ew.startsWith(w) || w.startsWith(ew)) { nameHits++; break; }
-                    }
-                }
-
-                // QAMROV muhim, mutlaq son emas.
+                // Qamrov IKKI tomonlama hisoblanadi:
+                //   qCov — so'rov so'zlarining nechasi sarlavhada bor
+                //   tCov — sarlavha so'zlarining nechasi so'rovda bor
                 //
-                // 12 so'zli tasvirda bitta "hujum" so'zi "Titanlar hujumi" ga
-                // mos kelgani film TOPILDI degani emas — qamrov past bo'lsa
-                // moslik hisoblanmaydi va so'rov Groq'ga o'tadi.
-                if (nameHits) {
-                    const coverage = nameHits / qWords.length;
-                    if (coverage === 1) {
-                        // TO'LIQ qamrov = kuchli moslik, qism-satrdan ham ishonchli.
-                        // 70 ball ataylab: Groq natijalari uchun chegara 60, va
-                        // Groq "Avengers" o'rniga "The Avengers" deb qaytarganda
-                        // ("the" — stop-so'z, qolgani to'liq mos) natija rad
-                        // etilib, foydalanuvchi "film topilmadi" ko'rardi.
+                // Faqat qCov ni qarash yetarli emas edi: "Iron Man" so'rovining
+                // ikkala so'zi ham "The Man in the Iron Mask" ichida bor (qCov=1),
+                // lekin bu butunlay boshqa film. tCov buni ushlaydi (2/3).
+                for (const tWords of [e.nameWords, e.origWords]) {
+                    if (!tWords.length) continue;
+
+                    let mq = 0;
+                    for (const w of qWords) {
+                        if (tWords.some((t) => wordMatches(w, t))) mq++;
+                    }
+                    if (!mq) continue;
+
+                    let mt = 0;
+                    for (const t of tWords) {
+                        if (qWords.some((w) => wordMatches(w, t))) mt++;
+                    }
+
+                    const qCov = mq / qWords.length;
+                    const tCov = mt / tWords.length;
+
+                    if (qCov === 1 && tCov === 1) {
+                        // Sarlavha bilan so'rov ma'noli so'zlar bo'yicha AYNAN
+                        // bir xil (faqat artikl/tartib farq qiladi):
+                        // "The Avengers" = "Avengers". Groq shu shaklda ham
+                        // qaytargani uchun bu chegaradan (60) yuqori bo'lishi shart.
+                        score = Math.max(score, 90);
+                    } else if (tCov === 1 && qCov >= 0.5 && tWords.length >= 2) {
+                        // So'rov sarlavhani to'liq o'z ichiga oladi, masalan
+                        // "The Man in the Iron Mask" -> "The Iron Mask".
+                        //
+                        // Sarlavha kamida 2 so'zli bo'lishi SHART. Bir so'zli
+                        // sarlavhada bu shart o'z-o'zidan bajariladi va boshqa
+                        // filmni tortib kelardi: "The Legend of Tarzan" so'rovi
+                        // "Afsona" (Legend) ni qaytarardi.
                         score = Math.max(score, 70);
-                    } else if (coverage >= 0.5) {
-                        // Qisman qamrov — foydalanuvchi o'zi yozganda ko'rsatiladi,
-                        // lekin Groq natijalari uchun chegaradan (60) past qoladi.
-                        score = Math.max(score, Math.round(coverage * 50));
+                    } else if (qCov === 1) {
+                        // So'rov sarlavhaning bir qismi: "matematik" ->
+                        // "Matematik mo'jizalar". Foydalanuvchi o'zi yozganda
+                        // ko'rsatiladi, lekin Groq chegarasidan (60) past.
+                        score = Math.max(score, 50);
+                    } else if (qCov >= 0.5) {
+                        score = Math.max(score, Math.round(qCov * 50));
                     }
                 }
             }
