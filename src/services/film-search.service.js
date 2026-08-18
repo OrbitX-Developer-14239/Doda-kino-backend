@@ -73,15 +73,24 @@ export const FilmSearchService = {
             const text = res.choices?.[0]?.message?.content?.trim();
             if (!text || /topilmadi/i.test(text)) return [];
 
+            // Groq bir xil filmni har safar boshqacha yozadi: goh "Avengers",
+            // goh "The Avengers", goh "Avengers: Endgame". Katalogda esa bitta
+            // yozuv bor. Shuning uchun har nomning variantlari ham qidiriladi —
+            // aks holda javob tasodifga bog'liq bo'lib qolardi.
             const names = new Set();
             for (const raw of text.split(",")) {
                 const name = raw.trim();
                 if (!name) continue;
                 names.add(name);
-                // "Avengers: Endgame" -> "Avengers" ham qidirilsin
+
+                // "Avengers: Endgame" -> "Avengers"
                 if (name.includes(":")) names.add(name.split(":")[0].trim());
+
+                // "The Avengers" -> "Avengers"
+                const noArticle = name.replace(/^(the|a|an)s+/i, "").trim();
+                if (noArticle && noArticle !== name) names.add(noArticle);
             }
-            return [...names].slice(0, 20);
+            return [...names].slice(0, 24);
         } catch (error) {
             console.error("🔎 [Qidiruv]: Groq xatosi:", error.message);
             return [];

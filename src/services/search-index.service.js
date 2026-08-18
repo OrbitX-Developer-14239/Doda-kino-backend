@@ -174,9 +174,18 @@ export const SearchIndex = {
                 let nameHits = 0;
                 for (const w of qWords) {
                     if (e.words.has(w)) { nameHits++; continue; }
-                    if (w.length >= 5 &&
-                        [...e.words].some((ew) => ew.startsWith(w) || w.startsWith(ew))) {
-                        nameHits++;
+                    // Prefiks moslik o'zbekcha qo'shimchalar uchun:
+                    // "matematik" <-> "matematikaning".
+                    //
+                    // IKKALA so'z ham uzun bo'lishi SHART. Aks holda nomdagi
+                    // qisqa so'z ("In Our Prime" dagi "in") istalgan uzun
+                    // so'rovga yopishardi: "Interstellar" so'rovi "in" orqali
+                    // "Matematik mo'jizalar" va "Alice in Wonderland" ni ham
+                    // qaytarardi.
+                    if (w.length < 5) continue;
+                    for (const ew of e.words) {
+                        if (ew.length < 5) continue;
+                        if (ew.startsWith(w) || w.startsWith(ew)) { nameHits++; break; }
                     }
                 }
 
@@ -188,8 +197,15 @@ export const SearchIndex = {
                 if (nameHits) {
                     const coverage = nameHits / qWords.length;
                     if (coverage === 1) {
-                        score = Math.max(score, 55);
+                        // TO'LIQ qamrov = kuchli moslik, qism-satrdan ham ishonchli.
+                        // 70 ball ataylab: Groq natijalari uchun chegara 60, va
+                        // Groq "Avengers" o'rniga "The Avengers" deb qaytarganda
+                        // ("the" — stop-so'z, qolgani to'liq mos) natija rad
+                        // etilib, foydalanuvchi "film topilmadi" ko'rardi.
+                        score = Math.max(score, 70);
                     } else if (coverage >= 0.5) {
+                        // Qisman qamrov — foydalanuvchi o'zi yozganda ko'rsatiladi,
+                        // lekin Groq natijalari uchun chegaradan (60) past qoladi.
                         score = Math.max(score, Math.round(coverage * 50));
                     }
                 }
