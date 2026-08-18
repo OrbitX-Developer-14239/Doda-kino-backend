@@ -7,6 +7,7 @@ import { normalizeMediaId } from "../utils/media.utils.js";
 import { getBotApi } from "../utils/telegram.js";
 import { duplicateKeyError } from "../utils/errors.js";
 import { cache } from "./cache.service.js";
+import { SearchIndex } from "./search-index.service.js";
 
 /**
  * Posterni Telegram kanaliga yuklab, bazaga saqlanadigan { channelId, msgId } ni qaytaradi.
@@ -70,9 +71,7 @@ export const FilmService = {
                 throw duplicateKeyError(err, "Bunday code mavjud, mavjud bo'lmagan code kiriting!");
             }
 
-            import('./ai.service.js').then(({ AIService }) => {
-                AIService.addFilmToIndex(data).catch(() => { });
-            });
+            SearchIndex.upsert(data);
 
             // Yangi film qo'shildi — ro'yxat va qidiruv keshi eskirdi
             await cache.invalidateFilm(data.toObject?.() ?? data);
@@ -134,10 +133,8 @@ export const FilmService = {
                 throw duplicateKeyError(err, "Bunday code mavjud, boshqa code kiriting!");
             }
 
-            // Update AI index if needed
-            import('./ai.service.js').then(({ AIService }) => {
-                AIService.addFilmToIndex(updatedFilm).catch(() => { });
-            });
+            // Qidiruv indeksini yangilaymiz (nom yoki kod o'zgargan bo'lishi mumkin)
+            SearchIndex.upsert(updatedFilm);
 
             // Eski VA yangi holat bo'yicha bekor qilamiz: kod yoki nom
             // o'zgargan bo'lsa eski kalit ham qolib ketmasligi kerak.
@@ -238,6 +235,8 @@ export const FilmService = {
 
         // Delete the film document
         await FilmModel.findByIdAndDelete(film._id);
+
+        SearchIndex.remove(film.code);
 
         // Film ham, uning barcha qismlari ham keshdan chiqarilishi kerak —
         // aks holda bot o'chirilgan filmni TTL tugagunicha ko'rsatib turadi.

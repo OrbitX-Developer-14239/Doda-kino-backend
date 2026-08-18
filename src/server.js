@@ -3,7 +3,9 @@ import app from "./index.js";
 import { CONFIG } from "./config/index.js";
 import { connectDB, conn1, conn2 } from "./config/db.js";
 import { AdminService } from "./services/admin.service.js";
-import { AIService } from "./services/ai.service.js";
+// ai.service.js (vektor qidiruv) ATAYLAB import qilinmaydi — u ~1.1 GB
+// RAM egallaydi. Qidiruv endi xotiradagi indeks + Groq orqali ishlaydi.
+import { SearchIndex } from "./services/search-index.service.js";
 import { initSocket, closeSocket } from "./socket.js";
 import { cache } from "./services/cache.service.js";
 import { logger } from "./utils/logger.js";
@@ -55,9 +57,14 @@ const startServer = async () => {
             logger.info(`CORS localhost (istalgan port): ${CONFIG.CORS_ALLOW_LOCALHOST ? "yoqilgan" : "o'chirilgan"}`);
         });
 
-        AIService.init().catch((error) => {
-            logger.warn(`AI xizmatini ishga tushirib bo'lmadi: ${error.message}`);
-        });
+        // Qidiruv indeksi fon rejimida quriladi — listen() ni bloklamaydi
+        SearchIndex.init()
+            .then(({ source, count }) => {
+                logger.info(`Qidiruv indeksi tayyor: ${count} ta film (${source})`);
+            })
+            .catch((error) => {
+                logger.warn(`Qidiruv indeksini qurib bo'lmadi: ${error.message}`);
+            });
     } catch (error) {
         logger.error(`Serverni ishga tushirishda xato: ${error?.stack || error}`);
         process.exit(1);

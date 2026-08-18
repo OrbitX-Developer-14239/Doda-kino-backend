@@ -1,4 +1,7 @@
-import { AIService } from "../services/ai.service.js";
+// Diqqat: ai.service.js (vektor qidiruv) ATAYLAB import qilinmaydi —
+// u yuklansa HuggingFace ONNX modeli ~1.1 GB RAM egallaydi. Kod o'chirilmagan,
+// shunchaki ishlatilmayapti; qidiruv endi search-index + Groq orqali ketadi.
+import { FilmSearchService } from "../services/film-search.service.js";
 import { AIMetadataService } from "../services/ai-metadata.service.js";
 import { CodeService } from "../services/code.service.js";
 import { FilmService } from "../services/film.service.js";
@@ -67,11 +70,13 @@ export const FilmController = {
 
     searchByAi: catchAsync(async (req, res) => {
         const { query } = req.body
-        const result = await AIService.askAI(query)
-        console.log(req.body);
+        const { films, source } = await FilmSearchService.search(query)
 
+        // Qaysi bosqichda topilgani logga yoziladi — "index" bo'lsa Groq
+        // umuman chaqirilmagan (tez va bepul)
+        console.log(`🔎 [Qidiruv]: "${query}" -> ${films.length} ta (${source})`)
 
-        res.status(200).json({ success: true, data: result })
+        res.status(200).json({ success: true, data: films })
     }),
 
     deleteFilm: catchAsync(async (req, res) => {
