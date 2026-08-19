@@ -6,6 +6,7 @@ import { FilmModel } from "../models/film.model.js";
 import { InstagramService } from "./instagram.service.js";
 import { normalizeMediaId } from "../utils/media.utils.js";
 import { getBotApi } from "../utils/telegram.js";
+import { requireTenant } from "../core/tenant-context.js";
 import { duplicateKeyError } from "../utils/errors.js";
 import { cache } from "./cache.service.js";
 
@@ -37,9 +38,12 @@ export const EpisodeService = {
         if (videoLocalPath) {
             try {
                 const botApi = await getBotApi();
-                const targetChannelId = CONFIG.CHANNEL_ID;
+                // Har botning O'Z media kanali (.env dagi CHANNEL_ID1/2/3)
+                const targetChannelId = requireTenant("video yuklash").channelId;
                 if (!targetChannelId) {
-                    throw new Error("CHANNEL_ID environment o'zgaruvchisi topilmadi!");
+                    const err = new Error("Bu bot uchun media kanali (.env da CHANNEL_IDn) sozlanmagan!");
+                    err.status = 400;
+                    throw err;
                 }
                 const file = new InputFile(videoLocalPath);
                 const message = await botApi.sendVideo(targetChannelId, file);

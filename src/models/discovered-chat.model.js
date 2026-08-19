@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { conn1 } from "../config/db.js";
+import { tenantModel } from "../core/tenant-context.js";
 
 /**
  * Bot a'zo bo'lgan kanal/guruhlar ro'yxati.
@@ -14,7 +14,7 @@ import { conn1 } from "../config/db.js";
  * Bu "nomzodlar" ro'yxati — obuna uchun ishlatiladigan haqiqiy kanallar
  * ChannelModel da. Admin shu ro'yxatdan tanlab ChannelModel ga qo'shadi.
  */
-const discoveredChatSchema = new Schema({
+export const discoveredChatSchema = new Schema({
     telegram_id: { type: String, required: true, unique: true },
     title: { type: String, default: "" },
     username: { type: String, default: null },
@@ -33,4 +33,7 @@ const discoveredChatSchema = new Schema({
 
 discoveredChatSchema.index({ is_admin: -1, title: 1 });
 
-export const DiscoveredChatModel = conn1.model("DiscoveredChat", discoveredChatSchema);
+// Sxema tenant-registry da har botning O'Z ulanishiga bog'lanadi.
+// Bu proxy esa joriy so'rovning botiga qarab to'g'ri modelga yo'naltiradi —
+// servislar kodi multibotga o'tishda o'zgarmasligi uchun.
+export const DiscoveredChatModel = tenantModel("DiscoveredChat");

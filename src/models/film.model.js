@@ -1,7 +1,7 @@
 import { Schema } from "mongoose";
-import { conn1 } from "../config/db.js";
+import { tenantModel } from "../core/tenant-context.js";
 
-const FilmSchema = new Schema({
+export const FilmSchema = new Schema({
     // Diqqat: bu yerda ilgari ikkala maydonda alohida `index: 'text'` bor edi.
     // MongoDB bitta kolleksiyada faqat BITTA text indeksga ruxsat beradi, shuning
     // uchun ikkinchisi har ishga tushishda jimgina xato bilan tugardi.
@@ -40,4 +40,7 @@ FilmSchema.index({ name: "text", originalName: "text" });
 FilmSchema.index({ createdAt: -1 });
 FilmSchema.index({ views: -1 });
 
-export const FilmModel = conn1.model("Film", FilmSchema);
+// Sxema tenant-registry da har botning O'Z ulanishiga bog'lanadi.
+// Bu proxy esa joriy so'rovning botiga qarab to'g'ri modelga yo'naltiradi —
+// servislar kodi multibotga o'tishda o'zgarmasligi uchun.
+export const FilmModel = tenantModel("Film");

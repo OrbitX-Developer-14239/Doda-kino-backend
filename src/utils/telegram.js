@@ -1,27 +1,16 @@
-import { Api } from "grammy";
-import { BotService } from "../services/bot.service.js";
-
-let cachedApi = null;
-let cachedForToken = null;
+import { requireTenant } from "../core/tenant-context.js";
 
 /**
- * Keshlangan bot tokenidan grammY Api obyektini qaytaradi.
- * Token o'zgarmaguncha bir xil Api instance qayta ishlatiladi.
+ * Joriy so'rov qaysi botga tegishli bo'lsa, o'sha botning grammY Api obyekti.
+ *
+ * MULTIBOT: har botning o'z tokeni bor (.env da), Api obyekti tenant
+ * yaratilganda bir marta quriladi va qayta ishlatiladi. Ilgari token
+ * bazadan o'qilardi — endi bazaga murojaat umuman yo'q.
+ *
+ * async qoldirildi — chaqiruvchi kodning barchasi `await getBotApi()` deb
+ * yozilgan, imzoni o'zgartirish shart emas.
  */
 export const getBotApi = async () => {
-    const token = await BotService.getTokenInternal();
-
-    if (!token) {
-        const error = new Error("Bot token topilmadi! Avval bot tokenini saqlang.");
-        error.status = 404;
-        throw error;
-    }
-
-    if (cachedApi && cachedForToken === token) {
-        return cachedApi;
-    }
-
-    cachedApi = new Api(token);
-    cachedForToken = token;
-    return cachedApi;
+    const tenant = requireTenant("getBotApi");
+    return tenant.api;
 };

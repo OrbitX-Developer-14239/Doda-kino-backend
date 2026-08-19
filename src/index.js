@@ -18,6 +18,7 @@ import { CONFIG } from "./config/index.js"
 import { logger } from "./utils/logger.js"
 import { basicAuth } from "./middlewares/basicAuth.middleware.js"
 import { generalLimiter } from "./middlewares/rateLimit.middleware.js"
+import { tenantMiddleware } from "./middlewares/tenant.middleware.js"
 
 const app = express()
 
@@ -140,14 +141,26 @@ if (!CONFIG.IS_PRODUCTION || CONFIG.ENABLE_SWAGGER) {
     app.use("/api-docs", ...swaggerGuard, swaggerStaticCache, swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 }
 
+// ── GLOBAL yo'llar: botga bog'liq emas, MAIN clusterda ishlaydi ────────────
+// Ular tenant middleware'dan OLDIN turadi — birorta botning bazasi yotib
+// qolsa ham admin panel login va loglar ishlashda davom etadi.
+app.use("/api/admin", adminRouter)
+app.use("/api/log", logsRouter)
+app.use("/api/instagram", instagramRouter)
+
+// ── MULTIBOT yo'llar ────────────────────────────────────────────────────────
+// /api/<botId>/film/...  -> ko'rsatilgan bot
+// /api/film/...          -> asosiy (birinchi) bot; admin panel shu ko'rinishda
+//                           chaqiradi, shuning uchun u o'zgarishsiz ishlayveradi.
+// Middleware botId prefiksini URL dan olib tashlaydi, pastdagi routerlar esa
+// oddiy /film, /episode ... ko'rinishini ko'radi.
+app.use("/api", tenantMiddleware)
+
 app.use("/api/film", filmsRouter)
 app.use("/api/episode", episodesRouter)
 app.use("/api/channel", channelRouter)
 app.use("/api/bot", botRouter)
 app.use("/api/user", userRouter)
-app.use("/api/instagram", instagramRouter)
-app.use("/api/admin", adminRouter)
-app.use("/api/log", logsRouter)
 app.use("/api/statistics", statisticsRouter)
 
 app.get("/health", (req, res) => res.json({ success: true, status: "ok" }))

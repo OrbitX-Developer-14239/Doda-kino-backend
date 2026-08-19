@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { BotService } from "../services/bot.service.js";
+import { currentTenant } from "../core/tenant-context.js";
 
 /**
  * Ikkita matnni uzunlik sizib chiqmaydigan va vaqt bo'yicha barqaror tarzda solishtiradi.
@@ -12,27 +12,33 @@ const safeEqual = (a, b) => {
 
 /**
  * Telegram bot yuboradigan so'rovlarni tekshiradi.
- * Sir faqat HTTP header orqali qabul qilinadi — query string access loglarga tushadi.
+ *
+ * MULTIBOT: header dagi token URL da ko'rsatilgan botning (tenant)
+ * .env dagi tokeniga AYNAN mos kelishi shart. Shu tekshiruv tufayli
+ * bir bot boshqa botning ID si bilan so'rov yubora olmaydi —
+ * token mos kelmasa 403.
+ *
+ * Sir faqat HTTP header orqali qabul qilinadi — query string access
+ * loglarga tushadi.
  */
 export const botAuthMiddleware = () => {
-    return async (req, res, next) => {
+    return (req, res, next) => {
         const botToken = req.headers["x-bot-token"] || req.headers["x-bot-secret"];
 
         if (!botToken) {
             return res.status(401).json({ success: false, message: "Bot tokeni yuborilmagan!" });
         }
 
-        try {
-            const bot = await BotService.getCachedBot();
-
-            if (!bot || !bot.token || !safeEqual(bot.token, botToken)) {
-                return res.status(403).json({ success: false, message: "Ushbu botga ruxsat yo'q" });
-            }
-
-            req.bot = { botId: bot.botId, username: bot.username };
-            next();
-        } catch (error) {
-            next(error);
+        const tenant = currentTenant();
+        if (!tenant?.token) {
+            return res.status(503).json({ success: false, message: "Bot sozlanmagan" });
         }
+
+        if (!safeEqual(tenant.token, botToken)) {
+            return res.status(403).json({ success: false, message: "Ushbu botga ruxsat yo'q" });
+        }
+
+        req.bot = { botId: tenant.botId, username: tenant.username };
+        next();
     };
 };

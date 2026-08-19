@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { conn2 } from "../config/db.js";
+import { mainConn } from "../config/db.js";
 
 /**
  * Telegram orqali kirish/ulash oqimida brauzerga beriladigan qisqa muddatli sessiya.
@@ -17,4 +17,4 @@ const AuthSessionSchema = new Schema({
 // MongoDB muddati o'tgan yozuvlarni o'zi o'chiradi
 AuthSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-export const AuthSessionModel = conn2.model("AuthSession", AuthSessionSchema);
+export const AuthSessionModel = mainConn.model("AuthSession", AuthSessionSchema);

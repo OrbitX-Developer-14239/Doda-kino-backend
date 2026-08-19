@@ -1,22 +1,10 @@
 import "dotenv/config";
-import { connectDB, conn1, conn2 } from "../src/config/db.js";
-import { FilmModel } from "../src/models/film.model.js";
-import { EpisodeModel } from "../src/models/episode.model.js";
-import { UserModel } from "../src/models/user.model.js";
-import { LogModel } from "../src/models/log.model.js";
-import { ChannelModel } from "../src/models/channels.model.js";
+import { connectDB, mainConn } from "../src/config/db.js";
+import { initTenants, allTenants, closeTenants } from "../src/core/tenant-registry.js";
 import { AdminModel } from "../src/models/admin.model.js";
 import { AuthSessionModel } from "../src/models/auth-session.model.js";
-
-const MODELS = [
-    ["films", FilmModel],
-    ["episodes", EpisodeModel],
-    ["users", UserModel],
-    ["logs", LogModel],
-    ["channels", ChannelModel],
-    ["admins", AdminModel],
-    ["auth sessions", AuthSessionModel],
-];
+import { LogModel } from "../src/models/log.model.js";
+import { BotModel } from "../src/models/bot.model.js";
 
 /**
  * MongoDB kolleksiyada faqat BITTA text indeksga ruxsat beradi.
@@ -45,25 +33,53 @@ const dropStaleTextIndexes = async (model) => {
     }
 };
 
+// ATAYLAB syncIndexes() emas, createIndexes(): syncIndexes sxemada
+// e'lon qilinmagan indekslarni O'CHIRADI, bu esa winston-mongodb o'zi
+// yaratgan TTL indeksini yo'q qilib, loglar to'planib qolishiga olib kelardi.
+const createFor = async (label, model) => {
+    process.stdout.write(`🔧 ${label} indekslari yaratilmoqda... `);
+    try {
+        await model.createIndexes();
+        console.log("✅");
+    } catch (error) {
+        console.log(`❌ ${error.message}`);
+    }
+};
+
 const run = async () => {
     await connectDB();
+    await initTenants();
 
-    await dropStaleTextIndexes(FilmModel);
+    console.log("\n── MAIN cluster (umumiy) ──");
+    for (const [label, model] of [
+        ["admins", AdminModel],
+        ["auth sessions", AuthSessionModel],
+        ["logs", LogModel],
+        ["bots", BotModel],
+    ]) {
+        await createFor(label, model);
+    }
 
-    // ATAYLAB syncIndexes() emas, createIndexes(): syncIndexes sxemada
-    // e'lon qilinmagan indekslarni O'CHIRADI, bu esa winston-mongodb o'zi
-    // yaratgan TTL indeksini yo'q qilib, loglar to'planib qolishiga olib kelardi.
-    for (const [label, model] of MODELS) {
-        process.stdout.write(`🔧 ${label} indekslari yaratilmoqda... `);
-        try {
-            await model.createIndexes();
-            console.log("✅");
-        } catch (error) {
-            console.log(`❌ ${error.message}`);
+    for (const tenant of allTenants()) {
+        console.log(`\n── Bot ${tenant.botId} ──`);
+        if (!tenant.active) {
+            console.log("  (ulanmagan — o'tkazib yuborildi)");
+            continue;
+        }
+
+        await dropStaleTextIndexes(tenant.models.Film);
+        for (const [label, model] of [
+            ["films", tenant.models.Film],
+            ["episodes", tenant.models.Episode],
+            ["users", tenant.models.User],
+            ["channels", tenant.models.Channel],
+            ["discovered chats", tenant.models.DiscoveredChat],
+        ]) {
+            await createFor(label, model);
         }
     }
 
-    await Promise.all([conn1.close(), conn2.close()]);
+    await Promise.all([mainConn.close(), closeTenants()]);
     console.log("\n🎉 Indekslar sinxronlandi.");
     process.exit(0);
 };

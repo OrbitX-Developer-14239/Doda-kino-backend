@@ -1,15 +1,18 @@
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
-import { FilmModel } from "../models/film.model.js";
+import { tenantProp } from "../core/tenant-context.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SNAPSHOT = path.resolve(__dirname, "../storage/search-index.json");
+const STORAGE_DIR = path.resolve(__dirname, "../storage");
 
 /**
  * ============================================
- *  Xotiradagi film qidiruv indeksi
+ *  Xotiradagi film qidiruv indeksi (multibot)
  * ============================================
+ *
+ * HAR BOT O'Z INDEKSIGA EGA — FilmSearchIndex klassi tenant-registry da
+ * har bot uchun alohida yaratiladi (film boshiga ~3 KB, arzon).
  *
  * FAQAT NOM bo'yicha qidiradi (name + originalName). Tavsif, janr va davlat
  * ATAYLAB indeksga kiritilmaydi: sinovlar ko'rsatdiki, tavsif so'zlari
@@ -26,7 +29,7 @@ const SNAPSHOT = path.resolve(__dirname, "../storage/search-index.json");
  *      Bu yerda normalizatsiyani o'zimiz boshqaramiz.
  *
  * Baza HAR DOIM haqiqat manbai bo'lib qoladi — indeks undan quriladi.
- * `storage/search-index.json` faqat tez ishga tushish uchun nusxa;
+ * `storage/search-index-<botId>.json` faqat tez ishga tushish uchun nusxa;
  * u bazadagi son bilan mos kelmasa e'tiborsiz qoldirilib qayta quriladi.
  */
 
@@ -49,9 +52,6 @@ const STOP_WORDS = new Set([
     "film", "filmi", "kino", "kinosi", "serial", "seriali", "haqida",
     "the", "a", "an", "of", "and", "va", "yoki", "bir", "eng",
 ]);
-
-let entries = [];      // { code, name, originalName, year, nName, nOriginal, words }
-let ready = false;
 
 /** Sarlavhaning ma'noli so'zlari (stop-so'zlarsiz) */
 const titleWords = (nTitle) =>
@@ -81,22 +81,34 @@ const wordMatches = (a, b) =>
     a === b ||
     (a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a)));
 
-export const SearchIndex = {
-    get size() { return entries.length; },
-    get isReady() { return ready; },
+export class FilmSearchIndex {
+    /**
+     * @param {number} botId - Telegram bot ID (snapshot fayl nomi uchun)
+     * @param {import("mongoose").Model} filmModel - shu botning Film modeli
+     */
+    constructor(botId, filmModel) {
+        this.botId = botId;
+        this.FilmModel = filmModel;
+        this.snapshotPath = path.join(STORAGE_DIR, `search-index-${botId}.json`);
+        this.entries = [];
+        this.ready = false;
+    }
+
+    get size() { return this.entries.length; }
+    get isReady() { return this.ready; }
 
     /** Bazadan to'liq qayta quradi */
     async rebuild() {
-        const films = await FilmModel.find()
+        const films = await this.FilmModel.find()
             .select("code name originalName year")
             .lean();
 
-        entries = films.map(toEntry);
-        ready = true;
+        this.entries = films.map(toEntry);
+        this.ready = true;
 
         await this._saveSnapshot().catch(() => { });
-        return entries.length;
-    },
+        return this.entries.length;
+    }
 
     /**
      * Ishga tushishda: nusxadan o'qiydi, lekin bazadagi son bilan
@@ -105,48 +117,48 @@ export const SearchIndex = {
     async init() {
         try {
             const [raw, dbCount] = await Promise.all([
-                fs.readFile(SNAPSHOT, "utf8"),
-                FilmModel.estimatedDocumentCount(),
+                fs.readFile(this.snapshotPath, "utf8"),
+                this.FilmModel.estimatedDocumentCount(),
             ]);
             const snap = JSON.parse(raw);
 
             if (Array.isArray(snap.films) && snap.films.length === dbCount) {
-                entries = snap.films.map(toEntry);
-                ready = true;
-                return { source: "nusxa", count: entries.length };
+                this.entries = snap.films.map(toEntry);
+                this.ready = true;
+                return { source: "nusxa", count: this.entries.length };
             }
         } catch { /* nusxa yo'q yoki buzuq — bazadan quramiz */ }
 
         const count = await this.rebuild();
         return { source: "baza", count };
-    },
+    }
 
     async _saveSnapshot() {
         const payload = {
             updatedAt: new Date().toISOString(),
-            films: entries.map((e) => ({
+            films: this.entries.map((e) => ({
                 code: e.code, name: e.name, originalName: e.originalName,
                 year: e.year,
             })),
         };
-        await fs.mkdir(path.dirname(SNAPSHOT), { recursive: true });
-        await fs.writeFile(SNAPSHOT, JSON.stringify(payload));
-    },
+        await fs.mkdir(STORAGE_DIR, { recursive: true });
+        await fs.writeFile(this.snapshotPath, JSON.stringify(payload));
+    }
 
     // ── Sinxronlash (film o'zgarganda chaqiriladi) ──────────────────────────
 
     upsert(film) {
         if (!film?.code) return;
         const entry = toEntry(film);
-        const i = entries.findIndex((e) => e.code === entry.code);
-        if (i === -1) entries.push(entry); else entries[i] = entry;
+        const i = this.entries.findIndex((e) => e.code === entry.code);
+        if (i === -1) this.entries.push(entry); else this.entries[i] = entry;
         this._saveSnapshot().catch(() => { });
-    },
+    }
 
     remove(code) {
-        entries = entries.filter((e) => e.code !== Number(code));
+        this.entries = this.entries.filter((e) => e.code !== Number(code));
         this._saveSnapshot().catch(() => { });
-    },
+    }
 
     // ── Qidiruv ─────────────────────────────────────────────────────────────
 
@@ -155,7 +167,7 @@ export const SearchIndex = {
      * Ball: to'liq moslik > boshlanishi > qism-satr > so'z qamrovi
      */
     search(query, limit = 12) {
-        if (!ready) return [];
+        if (!this.ready) return [];
 
         const nQuery = normalize(query);
         if (nQuery.length < 2) return [];
@@ -163,7 +175,7 @@ export const SearchIndex = {
         const qWords = tokenize(query).filter((w) => !STOP_WORDS.has(w));
         const scored = [];
 
-        for (const e of entries) {
+        for (const e of this.entries) {
             let score = 0;
 
             if (e.nName === nQuery || e.nOriginal === nQuery) {
@@ -236,7 +248,7 @@ export const SearchIndex = {
                 code: e.code, name: e.name, originalName: e.originalName,
                 year: e.year, _score: score,
             }));
-    },
+    }
 
     /**
      * ZAXIRA qidiruv: uzun tavsif ichida film NOMI yashiringan holat uchun.
@@ -252,7 +264,7 @@ export const SearchIndex = {
      * mos kelib ketardi.
      */
     searchLoose(query, limit = 6) {
-        if (!ready) return [];
+        if (!this.ready) return [];
 
         const qWords = tokenize(query)
             .filter((w) => !STOP_WORDS.has(w) && w.length >= 5);
@@ -260,7 +272,7 @@ export const SearchIndex = {
 
         const scored = [];
 
-        for (const e of entries) {
+        for (const e of this.entries) {
             let best = 0;
             for (const tWords of [e.nameWords, e.origWords]) {
                 if (!tWords.length) continue;
@@ -281,7 +293,7 @@ export const SearchIndex = {
                 code: e.code, name: e.name, originalName: e.originalName,
                 year: e.year, _score: score,
             }));
-    },
+    }
 
     /**
      * Bir nechta so'rov (masalan Groq qaytargan nomlar) bo'yicha, takrorsiz.
@@ -304,5 +316,11 @@ export const SearchIndex = {
         return [...best.values()]
             .sort((a, b) => b._score - a._score)
             .slice(0, limit);
-    },
-};
+    }
+}
+
+/**
+ * Joriy so'rovning botiga tegishli indeksga proxy.
+ * Servislar ilgarigidek `SearchIndex.search(...)` deb chaqiraveradi.
+ */
+export const SearchIndex = tenantProp("searchIndex");

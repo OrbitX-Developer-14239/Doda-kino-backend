@@ -1,7 +1,7 @@
 import { Schema } from "mongoose";
-import { conn1 } from "../config/db.js";
+import { tenantModel } from "../core/tenant-context.js";
 
-const channelSchema = new Schema({
+export const channelSchema = new Schema({
     telegram_id: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     invite_link: { type: String, required: false },
@@ -11,4 +11,7 @@ const channelSchema = new Schema({
     bot_permissions: { type: Object, default: null }
 }, { timestamps: true });
 
-export const ChannelModel = conn1.model("Channel", channelSchema);
+// Sxema tenant-registry da har botning O'Z ulanishiga bog'lanadi.
+// Bu proxy esa joriy so'rovning botiga qarab to'g'ri modelga yo'naltiradi —
+// servislar kodi multibotga o'tishda o'zgarmasligi uchun.
+export const ChannelModel = tenantModel("Channel");

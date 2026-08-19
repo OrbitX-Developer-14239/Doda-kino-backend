@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { conn1 } from "../config/db.js";
+import { tenantModel } from "../core/tenant-context.js";
 
 const EditVideoSchema = new Schema({
     videoUrl: { type: String, required: true },
@@ -33,4 +33,7 @@ export const EpisodeSchema = new Schema({
 EpisodeSchema.index({ filmId: 1, episodeNumber: 1 });
 EpisodeSchema.index({ views: -1 });
 
-export const EpisodeModel = conn1.model("Episode", EpisodeSchema);
+// Sxema tenant-registry da har botning O'Z ulanishiga bog'lanadi.
+// Bu proxy esa joriy so'rovning botiga qarab to'g'ri modelga yo'naltiradi —
+// servislar kodi multibotga o'tishda o'zgarmasligi uchun.
+export const EpisodeModel = tenantModel("Episode");

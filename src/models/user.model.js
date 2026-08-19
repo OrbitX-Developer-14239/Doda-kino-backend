@@ -1,7 +1,7 @@
 import { Schema } from "mongoose";
-import { conn2 } from "../config/db.js";
+import { tenantModel } from "../core/tenant-context.js";
 
-const userSchema = new Schema({
+export const userSchema = new Schema({
     telegram_id: { type: String, required: true, unique: true },
     first_name: { type: String },
     username: { type: String },
@@ -13,4 +13,7 @@ const userSchema = new Schema({
 userSchema.index({ createdAt: -1 });
 userSchema.index({ "channels_condition.telegram_id": 1, "channels_condition.is_member": 1 });
 
-export const UserModel = conn2.model("User", userSchema);
+// Sxema tenant-registry da har botning O'Z ulanishiga bog'lanadi.
+// Bu proxy esa joriy so'rovning botiga qarab to'g'ri modelga yo'naltiradi —
+// servislar kodi multibotga o'tishda o'zgarmasligi uchun.
+export const UserModel = tenantModel("User");

@@ -6,12 +6,74 @@ const parseList = (value) =>
         .map((item) => item.trim())
         .filter(Boolean);
 
+/**
+ * Bot konfiguratsiyalari (multitenant).
+ *
+ * Har bot IKKI clusterga ega: content (films, episodes) va data (users,
+ * channels, discovered chats). botId Telegram bot ID si — token boshidagi
+ * raqam. Yangi bot qo'shish = .env ga TOKEN + 2 ta URI qo'shish.
+ */
+const parseBots = () => {
+    const defs = [
+        {
+            token: process.env.BOT1_TOKEN,
+            contentUri: process.env.MONGO_URI1,
+            dataUri: process.env["MONGO_URI1.1"],
+            channelId: process.env.CHANNEL_ID1 || process.env.CHANNEL_ID,
+        },
+        {
+            token: process.env.BOT2_TOKEN,
+            contentUri: process.env.MONGO_URI_BOT2,
+            dataUri: process.env["MONGO_URI_BOT2.1"],
+            channelId: process.env.CHANNEL_ID2,
+        },
+        {
+            token: process.env.BOT3_TOKEN,
+            contentUri: process.env.MONGO_URI_BOT3,
+            dataUri: process.env["MONGO_URI_BOT3.1"],
+            channelId: process.env.CHANNEL_ID3,
+        },
+    ];
+
+    const bots = [];
+    for (const [i, def] of defs.entries()) {
+        // Token ham, URI lar ham bo'lmasa — bu o'rin ishlatilmayapti, jimgina o'tamiz
+        if (!def.token && !def.contentUri && !def.dataUri) continue;
+
+        if (!def.token || !def.contentUri || !def.dataUri) {
+            console.warn(
+                `[Config] ${i + 1}-bot chala sozlangan (token/contentUri/dataUri dan biri yo'q) — o'tkazib yuborildi.`
+            );
+            continue;
+        }
+
+        const botId = Number(def.token.split(":")[0]);
+        if (!Number.isFinite(botId) || botId <= 0) {
+            console.warn(`[Config] ${i + 1}-bot tokeni yaroqsiz ko'rinadi — o'tkazib yuborildi.`);
+            continue;
+        }
+
+        // Atlas URI ichida to'ldirilmagan namuna qolib ketgan bo'lsa
+        // (masalan "<db_username>") ulanish baribir yiqiladi — oldindan aytamiz.
+        for (const uri of [def.contentUri, def.dataUri]) {
+            if (/<[^>]+>/.test(uri)) {
+                console.warn(
+                    `[Config] ${i + 1}-bot (${botId}) URI sida to'ldirilmagan joy bor: "${uri.match(/<[^>]+>/)[0]}". Ulanish muvaffaqiyatsiz bo'ladi.`
+                );
+            }
+        }
+
+        bots.push({ botId, ...def });
+    }
+    return bots;
+};
+
 export const CONFIG = {
     NODE_ENV: process.env.NODE_ENV || "development",
     PORT: process.env.PORT || 5000,
     GROQ_API_KEY: process.env.GROQ_API_KEY,
-    MONGO_URI1: process.env.MONGO_URI1,
-    MONGO_URI2: process.env.MONGO_URI2,
+    MONGO_URI_MAIN: process.env.MONGO_URI_MAIN,
+    BOTS: parseBots(),
     ITEMS_PER_PAGE: 12,
     INSTAGRAM_ID: process.env.INSTAGRAM_ID,
     INSTAGRAM_TEMP_ACCESS_TOKEN: process.env.INSTAGRAM_TEMP_ACCESS_TOKEN,
@@ -53,11 +115,17 @@ export const CONFIG = {
 CONFIG.IS_PRODUCTION = CONFIG.NODE_ENV === "production";
 
 const required = {
-    MONGO_URI1: CONFIG.MONGO_URI1,
-    MONGO_URI2: CONFIG.MONGO_URI2,
+    MONGO_URI_MAIN: CONFIG.MONGO_URI_MAIN,
     JWT_SECRET: CONFIG.JWT_SECRET,
     JWT_REFRESH_SECRET: CONFIG.JWT_REFRESH_SECRET,
 };
+
+if (!CONFIG.BOTS.length) {
+    throw new Error(
+        "CRITICAL: birorta ham bot sozlanmagan. .env da kamida BOT1_TOKEN, " +
+        "MONGO_URI1 va MONGO_URI1.1 bo'lishi kerak."
+    );
+}
 
 const missing = Object.entries(required)
     .filter(([, value]) => !value)

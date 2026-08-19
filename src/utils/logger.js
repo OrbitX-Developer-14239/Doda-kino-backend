@@ -51,7 +51,10 @@ export const logger = winston.createLogger({
             // "info" da har bir log qatori haqiqiy so'rovlar bilan bir xil klasterga
             // yozuv qilardi. Bazaga faqat ogohlantirish va xatolar tushadi.
             level: "warn",
-            db: CONFIG.MONGO_URI2,
+            // Loglar endi MAIN clusterga yoziladi (multibot: umumiy narsalar shu yerda).
+            // dbName aniq ko'rsatiladi — MAIN URI da yo'l qismi yo'q, usiz "test" ga yozardi.
+            db: CONFIG.MONGO_URI_MAIN,
+            dbName: "dodakino",
             collection: "server_logs",
             expireAfterSeconds: 72 * 60 * 60,
             format: combine(

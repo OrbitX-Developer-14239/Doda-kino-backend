@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import { InputFile } from "grammy";
 import { CONFIG } from "../config/index.js";
+import { requireTenant } from "../core/tenant-context.js";
 import { FilmModel } from "../models/film.model.js";
 import { EpisodeModel } from "../models/episode.model.js";
 import { normalizeMediaId } from "../utils/media.utils.js";
@@ -16,9 +17,13 @@ import { SearchIndex } from "./search-index.service.js";
 async function uploadPosterToTelegram(posterLocalPath) {
     try {
         const botApi = await getBotApi();
-        const targetChannelId = CONFIG.CHANNEL_ID;
+        // Har botning O'Z poster kanali (.env dagi CHANNEL_ID1/2/3) —
+        // bot o'sha kanalda admin bo'lishi shart.
+        const targetChannelId = requireTenant("poster yuklash").channelId;
         if (!targetChannelId) {
-            throw new Error("CHANNEL_ID environment o'zgaruvchisi topilmadi!");
+            const error = new Error("Bu bot uchun poster kanali (.env da CHANNEL_IDn) sozlanmagan!");
+            error.status = 400;
+            throw error;
         }
 
         const file = new InputFile(posterLocalPath);

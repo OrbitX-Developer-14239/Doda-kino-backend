@@ -1,29 +1,34 @@
 import mongoose from "mongoose"
 import { CONFIG } from "./index.js"
 
-const options = {
-    maxPoolSize: 50,
-    minPoolSize: 5,
+export const CONNECTION_OPTIONS = {
+    maxPoolSize: 20,
+    minPoolSize: 2,
     serverSelectionTimeoutMS: 10_000,
     socketTimeoutMS: 45_000,
+    // Hamma clusterda bir xil baza nomi ishlatiladi. Bu ayniqsa yangi
+    // clusterlar uchun muhim: ularning URI sida yo'l qismi yo'q va usiz
+    // Mongoose hammasini "test" bazasiga yozib yuborardi.
+    dbName: "dodakino",
     // Production da indekslar har ishga tushishda avtomatik yaratilmaydi —
     // buning uchun alohida `npm run sync-indexes` buyrug'i bor.
     autoIndex: !CONFIG.IS_PRODUCTION,
 };
 
-export const conn1 = mongoose.createConnection(CONFIG.MONGO_URI1, options);
-export const conn2 = mongoose.createConnection(CONFIG.MONGO_URI2, options);
+/**
+ * MAIN cluster — barcha botlar uchun UMUMIY narsalar:
+ * admins, authsessions, bots (registr), server_logs.
+ *
+ * Har botning o'z clusterlariga ulanish core/tenant-registry.js da.
+ */
+export const mainConn = mongoose.createConnection(CONFIG.MONGO_URI_MAIN, CONNECTION_OPTIONS);
 
 export const connectDB = async () => {
     try {
-        await Promise.all([
-            conn1.asPromise(),
-            conn2.asPromise()
-        ]);
-        console.log(`Database 1 (Films/Episodes/Channels) ulandi: ${conn1.host}`);
-        console.log(`Database 2 (Admins/Bots/Logs/Users) ulandi: ${conn2.host}`);
+        await mainConn.asPromise();
+        console.log(`MAIN cluster (admins/bots/logs) ulandi: ${mainConn.host}`);
     } catch (error) {
-        console.error(`❌ DB ulanishida xatolik: ${error.message}`);
+        console.error(`❌ MAIN cluster ulanishida xatolik: ${error.message}`);
         process.exit(1);
     }
 }
