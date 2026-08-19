@@ -1,3 +1,4 @@
+import { currentTenant } from "../core/tenant-context.js";
 /**
  * Normalizes media ID inputs into either { channelId, msgId } object or string fileId.
  * 
@@ -45,7 +46,9 @@ export function normalizeMediaId(val) {
     }
 
     if (/^\d+$/.test(str)) {
-        const defaultChannel = process.env.CHANNEL_ID ? String(process.env.CHANNEL_ID).replace("-100", "") : "3831468244";
+        // Faqat msgId berilgan bo'lsa kanal — joriy botning media kanali
+        const tenantChannel = currentTenant()?.channelId || process.env.CHANNEL_ID;
+        const defaultChannel = tenantChannel ? String(tenantChannel).replace("-100", "") : "3831468244";
         return {
             channelId: defaultChannel,
             msgId: Number(str)

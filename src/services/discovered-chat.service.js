@@ -1,5 +1,6 @@
 import { DiscoveredChatModel } from "../models/discovered-chat.model.js";
 import { ChannelModel } from "../models/channels.model.js";
+import { currentTenant } from "../core/tenant-context.js";
 import { CONFIG } from "../config/index.js";
 import { getBotApi } from "../utils/telegram.js";
 
@@ -59,7 +60,7 @@ export const DiscoveredChatService = {
      * Ro'yxat uch manbadan yig'iladi, chunki Telegram enumeratsiya bermaydi:
      *   1) `my_chat_member` orqali topilganlar (kelajakda avtomatik to'ladi)
      *   2) allaqachon qo'shilgan kanallar (ChannelModel)
-     *   3) .env dagi CHANNEL_ID (media saqlanadigan kanal)
+     *   3) shu botning media kanali (.env dagi CHANNEL_IDn)
      */
     async listAvailable({ refresh = true } = {}) {
         const [discovered, channels] = await Promise.all([
@@ -94,8 +95,9 @@ export const DiscoveredChatService = {
             }
         }
 
-        if (CONFIG.CHANNEL_ID) {
-            const id = normalizeId(CONFIG.CHANNEL_ID);
+        const tenantChannelId = currentTenant()?.channelId;
+        if (tenantChannelId) {
+            const id = normalizeId(tenantChannelId);
             if (!merged.has(id)) {
                 merged.set(id, {
                     telegram_id: id, title: "(media kanali)", username: null, type: "channel",
