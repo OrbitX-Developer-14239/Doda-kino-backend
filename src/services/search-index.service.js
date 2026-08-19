@@ -239,6 +239,51 @@ export const SearchIndex = {
     },
 
     /**
+     * ZAXIRA qidiruv: uzun tavsif ichida film NOMI yashiringan holat uchun.
+     *
+     * "qo'rqinchli masxaraboz bolalarni o'g'irlaydi" — bu tavsif, lekin
+     * ichida "Masxaraboz Ono" filmining nomi bor. Asosiy `search()` uni
+     * ko'rmaydi: 4 so'zdan faqat 1 tasi mos kelgani (qamrov 0.25) uzun
+     * tasviriy so'rovlarda shovqin bo'lgani uchun ataylab rad etiladi.
+     *
+     * Shuning uchun bu FAQAT Groq hech nima topa olmaganda chaqiriladi —
+     * u holda tanlov "taxminiy natija" va "bo'sh ekran" o'rtasida bo'ladi.
+     * Faqat uzun (>= 5 harf) so'zlar hisobga olinadi, qisqalari tasodifan
+     * mos kelib ketardi.
+     */
+    searchLoose(query, limit = 6) {
+        if (!ready) return [];
+
+        const qWords = tokenize(query)
+            .filter((w) => !STOP_WORDS.has(w) && w.length >= 5);
+        if (!qWords.length) return [];
+
+        const scored = [];
+
+        for (const e of entries) {
+            let best = 0;
+            for (const tWords of [e.nameWords, e.origWords]) {
+                if (!tWords.length) continue;
+                let mt = 0;
+                for (const t of tWords) {
+                    if (t.length >= 5 && qWords.some((w) => wordMatches(w, t))) mt++;
+                }
+                if (mt) best = Math.max(best, mt / tWords.length);
+            }
+            // Sarlavhaning kamida yarmi so'rovda uchrashi kerak
+            if (best >= 0.5) scored.push({ e, score: Math.round(best * 40) });
+        }
+
+        return scored
+            .sort((a, b) => b.score - a.score || String(a.e.name).localeCompare(String(b.e.name)))
+            .slice(0, limit)
+            .map(({ e, score }) => ({
+                code: e.code, name: e.name, originalName: e.originalName,
+                year: e.year, _score: score,
+            }));
+    },
+
+    /**
      * Bir nechta so'rov (masalan Groq qaytargan nomlar) bo'yicha, takrorsiz.
      *
      * `minScore` — Groq to'liq kino nomlarini beradi, shuning uchun undan
