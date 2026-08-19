@@ -1,18 +1,22 @@
 import { ChannelModel } from "../models/channels.model.js"
 import { UserModel } from "../models/user.model.js"
 import { getBotApi } from "../utils/telegram.js"
+import { requireTenant } from "../core/tenant-context.js"
 
 // Kanallar ro'yxati botning ENG issiq yo'li — har xabarda so'raladi, lekin
 // o'zi juda kam o'zgaradi. Qisqa TTL kesh har so'rovdagi ~60ms lik Atlas
 // safarini olib tashlaydi. Yaratish/tahrirlash/o'chirish shu jarayonning
 // o'zida keshni darhol tozalaydi, shuning uchun eskirgan ma'lumot ko'rinmaydi.
+//
+// DIQQAT — HAR BOT UCHUN ALOHIDA (botId bo'yicha Map). Ilgari bitta umumiy
+// o'zgaruvchi edi: 1-bot so'raganda to'lib, 30 soniya ichida 2-bot so'rasa
+// unga 1-BOTNING kanallari qaytardi — yangi botlar hech qanday kanal
+// qo'shilmagan bo'lsa ham begona kanalga obuna so'rab turardi.
 const CHANNELS_CACHE_TTL_MS = 30 * 1000;
-let cachedChannels = null;
-let channelsCachedAt = 0;
+const channelsCacheByBot = new Map(); // botId -> { data, at }
 
 const invalidateChannelsCache = () => {
-    cachedChannels = null;
-    channelsCachedAt = 0;
+    channelsCacheByBot.delete(requireTenant("kanal keshi").botId);
 };
 
 export const ChannelService = {
@@ -127,13 +131,15 @@ export const ChannelService = {
     },
 
     async getChannels() {
-        if (cachedChannels && Date.now() - channelsCachedAt < CHANNELS_CACHE_TTL_MS) {
-            return cachedChannels;
+        const botId = requireTenant("kanallar ro'yxati").botId;
+        const cached = channelsCacheByBot.get(botId);
+        if (cached && Date.now() - cached.at < CHANNELS_CACHE_TTL_MS) {
+            return cached.data;
         }
 
-        cachedChannels = await ChannelModel.find().lean();
-        channelsCachedAt = Date.now();
-        return cachedChannels;
+        const data = await ChannelModel.find().lean();
+        channelsCacheByBot.set(botId, { data, at: Date.now() });
+        return data;
     },
 
     async getChannelById(id) {
