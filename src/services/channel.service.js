@@ -2,6 +2,7 @@ import { ChannelModel } from "../models/channels.model.js"
 import { UserModel } from "../models/user.model.js"
 import { getBotApi } from "../utils/telegram.js"
 import { requireTenant } from "../core/tenant-context.js"
+import { cache } from "./cache.service.js"
 
 // Kanallar ro'yxati botning ENG issiq yo'li — har xabarda so'raladi, lekin
 // o'zi juda kam o'zgaradi. Qisqa TTL kesh har so'rovdagi ~60ms lik Atlas
@@ -15,8 +16,12 @@ import { requireTenant } from "../core/tenant-context.js"
 const CHANNELS_CACHE_TTL_MS = 30 * 1000;
 const channelsCacheByBot = new Map(); // botId -> { data, at }
 
-const invalidateChannelsCache = () => {
+// Kanal o'zgarganda IKKALA kesh ham tozalanadi:
+//   1) shu jarayondagi Map (backend o'zi uchun)
+//   2) Redis — bot o'sha yerdan o'qiydi va versiya orqali o'z keshini tashlaydi
+const invalidateChannelsCache = async () => {
     channelsCacheByBot.delete(requireTenant("kanal keshi").botId);
+    await cache.invalidateChannels();
 };
 
 export const ChannelService = {
@@ -126,7 +131,7 @@ export const ChannelService = {
             bot_permissions: status
         });
 
-        invalidateChannelsCache();
+        await invalidateChannelsCache();
         return data;
     },
 
@@ -244,7 +249,7 @@ export const ChannelService = {
         existChannel.bot_permissions = status;
 
         await existChannel.save();
-        invalidateChannelsCache();
+        await invalidateChannelsCache();
         return existChannel;
     },
 
@@ -258,7 +263,7 @@ export const ChannelService = {
         }
 
         await ChannelModel.deleteOne({ _id: id })
-        invalidateChannelsCache();
+        await invalidateChannelsCache();
         return true
     }
 }

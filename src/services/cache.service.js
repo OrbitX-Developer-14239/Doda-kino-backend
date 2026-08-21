@@ -128,6 +128,29 @@ class CacheService {
      * @param {object} film  - o'zgarishdan OLDINGI holat (eski kod/nom uchun)
      * @param {object} [next] - yangi holat (kod yoki nom o'zgargan bo'lsa)
      */
+    /**
+     * Majburiy obuna kanallari o'zgardi (qo'shildi/tahrirlandi/o'chirildi).
+     *
+     * Ikki ish qilinadi:
+     *   1) Redis'dagi ro'yxat nusxasi o'chiriladi
+     *   2) Versiya raqami oshiriladi — bot buni ko'rib O'Z xotirasidagi
+     *      keshni ham, foydalanuvchilarning "obunasi to'liq" belgisini ham
+     *      tashlaydi. Aks holda yangi kanal 30 daqiqagacha so'ralmasdi.
+     */
+    async invalidateChannels() {
+        const K = this._keys();
+        if (!K) return;
+
+        await this.del([K.channels()]);
+
+        if (!this.isReady || !this.client) return;
+        try {
+            await this.client.incr(K.channelsVersion());
+        } catch (error) {
+            console.error("[Cache] Kanal versiyasini oshirishda xato:", error.message);
+        }
+    }
+
     async invalidateFilm(film, next = null) {
         if (!film && !next) return;
         const K = this._keys();

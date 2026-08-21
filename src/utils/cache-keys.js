@@ -41,6 +41,11 @@ export const createKeys = (botId) => {
         search: (query) => `${p}:film:search:${String(query).toLowerCase().trim()}`,
         channels: () => `${p}:channels`,
 
+        // Majburiy kanallar ro'yxati o'zgarganda backend buni INCR qiladi.
+        // Bot shu raqamga qarab o'z keshlarini (kanal ro'yxati va
+        // foydalanuvchilarning obuna holati) darhol tashlaydi.
+        channelsVersion: () => `${p}:channels:version`,
+
         // ── Versiya belgisi ──
         // Har qanday film/epizod o'zgarishida backend buni INCR qiladi.
         // Sessiyalarda saqlangan ro'yxat nusxalari shu raqam bo'yicha eskirganini
