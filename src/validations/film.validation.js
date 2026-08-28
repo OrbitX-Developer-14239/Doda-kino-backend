@@ -10,6 +10,7 @@ export const filmAiSuggestValidation = z.object({
         name: z.string().trim().min(1, "Kino nomi majburiy").max(200),
         year: z.coerce.number().int().min(1800).max(new Date().getFullYear()).optional(),
         country: z.string().trim().min(2).max(100).optional(),
+        seasonsCount: z.coerce.number().int().min(1).max(100).optional(),
         // Nechta qism uchun bo'sh kod kerakligi
         episodeCount: z.coerce.number().int().min(1).max(200).default(1),
     })
@@ -22,6 +23,8 @@ export const filmValidation = z.object({
         originalName: z.string().trim().min(1, "Film original nomi kamida 1ta harfdan iborat bo'lishi kerak"),
         year: z.coerce.number().int().min(1800, "Xato yil").max(new Date().getFullYear(), "Kelajakdagi yil kiritib bo'lmaydi"),
         country: z.string().trim().min(2, "Davlat kiritilishi shart"),
+        // Fasllar soni — ixtiyoriy, berilmasa 1 (bir faslli film)
+        seasonsCount: z.coerce.number().int().min(1, "Fasllar soni kamida 1 bo'lishi kerak").max(100).optional(),
         genres: z.preprocess(val => {
             if (typeof val === 'string') {
                 try { const parsed = JSON.parse(val); if (Array.isArray(parsed)) return parsed; } catch (e) { }

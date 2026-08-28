@@ -63,6 +63,8 @@ export const EpisodeService = {
 
         const episodeData = {
             ...body,
+            // Fasl ko'rsatilmasa 1 — bir faslli filmlar uchun
+            season: Number(body.season) || 1,
             videoFileId: telegramVideoMediaId || normalizeMediaId(body.videoFileId),
             description: body.description || film.description,
             releaseYear: body.releaseYear || film.year,
@@ -89,6 +91,7 @@ export const EpisodeService = {
                         $each: [{
                             episodeId: episode._id,
                             episodeNumber: episode.episodeNumber,
+                            season: episode.season,
                             code: episode.code,
                             name: episode.name,
                             description: episode.description,
@@ -97,7 +100,7 @@ export const EpisodeService = {
                             genres: episode.genres,
                             videoFileId: episode.videoFileId
                         }],
-                        $sort: { episodeNumber: 1 }
+                        $sort: { season: 1, episodeNumber: 1 }
                     }
                 },
                 $inc: { episodesCount: 1 }
@@ -166,6 +169,7 @@ export const EpisodeService = {
             name: body.name || episode.name,
             description: body.description || episode.description,
             episodeNumber: body.episodeNumber ? Number(body.episodeNumber) : episode.episodeNumber,
+            season: body.season ? Number(body.season) : (episode.season || 1),
             releaseYear: body.releaseYear ? Number(body.releaseYear) : episode.releaseYear,
             country: body.country || episode.country,
             genres: body.genres && body.genres.length > 0 ? body.genres : episode.genres,
@@ -187,6 +191,7 @@ export const EpisodeService = {
                     "episodes.$.name": updatedEpisode.name,
                     "episodes.$.description": updatedEpisode.description,
                     "episodes.$.episodeNumber": updatedEpisode.episodeNumber,
+                    "episodes.$.season": updatedEpisode.season,
                     "episodes.$.releaseYear": updatedEpisode.releaseYear,
                     "episodes.$.country": updatedEpisode.country,
                     "episodes.$.genres": updatedEpisode.genres,

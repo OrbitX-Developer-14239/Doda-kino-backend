@@ -117,7 +117,8 @@ export const FilmService = {
                 year: body.year || film.year,
                 country: body.country || film.country,
                 genres: body.genres && body.genres.length > 0 ? body.genres : film.genres,
-                code: body.code ? Number(body.code) : film.code
+                code: body.code ? Number(body.code) : film.code,
+                seasonsCount: body.seasonsCount ? Number(body.seasonsCount) : (film.seasonsCount || 1)
                 // episodesCount ataylab tegilmaydi — u epizodlar bo'yicha avtomatik yuritiladi.
             };
 
@@ -168,7 +169,7 @@ export const FilmService = {
             FilmModel.find()
                 // episodesCount ham kerak: admin paneldagi "Qismlar" ustuni shundan
                 // o'qiydi. U tanlanmagani uchun ro'yxatda hamma film "0 ta" ko'rinardi.
-                .select("name originalName year code views posterId episodesCount")
+                .select("name originalName year code views posterId episodesCount seasonsCount")
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)

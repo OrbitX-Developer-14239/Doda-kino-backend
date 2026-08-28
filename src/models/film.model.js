@@ -2,14 +2,14 @@ import { Schema } from "mongoose";
 import { tenantModel } from "../core/tenant-context.js";
 
 export const FilmSchema = new Schema({
-    // Diqqat: bu yerda ilgari ikkala maydonda alohida `index: 'text'` bor edi.
-    // MongoDB bitta kolleksiyada faqat BITTA text indeksga ruxsat beradi, shuning
-    // uchun ikkinchisi har ishga tushishda jimgina xato bilan tugardi.
     name: { type: String, required: true },
     originalName: { type: String, required: true },
     description: { type: String, required: true },
-    // Qo'lda kiritilmaydi — epizod qo'shilganda/o'chirilganda avtomatik yangilanadi.
     episodesCount: { type: Number, default: 0 },
+    // Fasllar soni. 1 (yoki ko'rsatilmagan) = oddiy film/serial: botda
+    // qismlar to'g'ridan-to'g'ri chiqadi va "1-fasl" degan yozuv KO'RINMAYDI.
+    // 2 va undan ko'p bo'lsa bot avval fasl tugmalarini ko'rsatadi.
+    seasonsCount: { type: Number, default: 1, min: 1 },
     year: { type: Number, required: true },
     country: { type: String, required: true },
     genres: [{ type: String, required: true }],
@@ -22,6 +22,8 @@ export const FilmSchema = new Schema({
         _id: false,
         episodeId: { type: Schema.Types.ObjectId, ref: "Episode", required: true },
         episodeNumber: { type: Number, required: true },
+        // Qaysi faslga tegishli (bir faslli filmlarda har doim 1)
+        season: { type: Number, default: 1 },
         code: { type: Number, required: true },
         name: { type: String, required: true },
         description: { type: String },
@@ -32,15 +34,9 @@ export const FilmSchema = new Schema({
     }]
 }, { timestamps: true });
 
-// Bitta birlashtirilgan text indeks (nomlar bo'yicha qidiruv uchun)
 FilmSchema.index({ name: "text", originalName: "text" });
 
-// Ro'yxat va statistika sahifalari shu tartiblashlarni ishlatadi — indekssiz
-// har so'rov butun kolleksiyani skanerlab, xotirada saralardi.
 FilmSchema.index({ createdAt: -1 });
 FilmSchema.index({ views: -1 });
 
-// Sxema tenant-registry da har botning O'Z ulanishiga bog'lanadi.
-// Bu proxy esa joriy so'rovning botiga qarab to'g'ri modelga yo'naltiradi —
-// servislar kodi multibotga o'tishda o'zgarmasligi uchun.
 export const FilmModel = tenantModel("Film");

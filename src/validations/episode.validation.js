@@ -19,6 +19,7 @@ export const episodeAiSuggestValidation = z.object({
         filmId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Noto'g'ri Film ID formati").optional(),
         filmName: z.string().trim().min(1).max(200).optional(),
         episodeNumber: z.coerce.number().int().min(1).default(1),
+        season: z.coerce.number().int().min(1).max(100).optional(),
         count: z.coerce.number().int().min(1).max(200).default(1),
     }).refine((b) => b.filmId || b.filmName, {
         message: "filmId yoki filmName berilishi shart",
@@ -31,6 +32,8 @@ export const EpisodeValidation = z.object({
         filmId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Noto'g'ri Film ID formati (Mongoose ObjectId bo'lishi shart)"),
         code: z.coerce.number().int().min(100, "Kodingiz 100 dan kichik bo'lishi mumkin emas"),
         episodeNumber: z.coerce.number().int().min(1, "Qism tartib raqami 1 dan boshlanishi kerak"),
+        // Fasl raqami — ko'rsatilmasa 1
+        season: z.coerce.number().int().min(1, "Fasl raqami kamida 1 bo'lishi kerak").max(100).optional(),
         name: z.string().trim().min(1, "Qism nomi kamida 1ta harfdan iborat bo'lishi kerak"),
         videoFileId: z.preprocess(val => {
             if (typeof val === 'string') {
