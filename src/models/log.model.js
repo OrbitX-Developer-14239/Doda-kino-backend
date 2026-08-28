@@ -22,9 +22,13 @@ const logSchema = new mongoose.Schema({
 // Loglar sahifasi vaqt + daraja + manba bo'yicha filtrlaydi va vaqt bo'yicha saralaydi
 logSchema.index({ timestamp: -1, level: 1 });
 
-// 60 kundan eski loglarni MongoDB o'zi o'chiradi — aks holda 512 MB lik
-// bepul clusterda birinchi bo'lib loglar joyni to'ldirardi.
-logSchema.index({ timestamp: 1 }, { expireAfterSeconds: 60 * 24 * 60 * 60 });
+// TTL indeksini (7 kun) winston-mongodb O'ZI yaratadi va boshqaradi —
+// muddat logger.js dagi "expireAfterSeconds" da belgilanadi.
+//
+// Uni bu yerda ham e'lon qilish MUMKIN EMAS: winston indeksni
+// { timestamp: -1 } kaliti bilan, lekin "timestamp_1" nomi bilan yaratadi.
+// Sxemadagi { timestamp: 1 } ham xuddi shu nomni talab qiladi va indeks
+// yaratish "IndexOptionsConflict" bilan yiqiladi.
 logSchema.index({ "meta.source": 1, timestamp: -1 });
 
 export const LogModel = mainConn.model("Log", logSchema, "server_logs");

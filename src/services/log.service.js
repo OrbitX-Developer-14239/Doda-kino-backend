@@ -7,12 +7,18 @@ export const LogService = {
         let filter = {};
 
         if (time) {
+            // Soat ("24h") ham, kun ("7d") ham qabul qilinadi.
             // Express bir xil parametr ikki marta kelsa massiv qaytaradi —
             // String() ga o'tkazilmasa .replace TypeError bilan 500 berardi.
-            const parsedTime = parseInt(String(time).replace('h', ''));
-            if (!isNaN(parsedTime)) {
-                const sinceDate = new Date(Date.now() - parsedTime * 60 * 60 * 1000);
-                filter.timestamp = { $gte: sinceDate };
+            const raw = String(time).trim().toLowerCase();
+            const amount = parseInt(raw);
+
+            if (!isNaN(amount) && amount > 0) {
+                const hours = raw.endsWith("d") ? amount * 24 : amount;
+                // Loglar 7 kundan uzoq saqlanmaydi — undan katta
+                // so'ralsa ham shu chegara qo'llanadi.
+                const capped = Math.min(hours, 7 * 24);
+                filter.timestamp = { $gte: new Date(Date.now() - capped * 60 * 60 * 1000) };
             }
         }
 

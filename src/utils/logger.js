@@ -48,15 +48,19 @@ export const logger = winston.createLogger({
             )
         }),
         new winston.transports.MongoDB({
-            // "info" da har bir log qatori haqiqiy so'rovlar bilan bir xil klasterga
-            // yozuv qilardi. Bazaga faqat ogohlantirish va xatolar tushadi.
-            level: "warn",
+            // "info" ham bazaga yoziladi — panelda tizim hodisalari (ishga
+            // tushish, indeks, bot registri) ko'rinib tursin. Hajm xavfi yo'q:
+            // so'rovlar per-request loglanmaydi, info yozuvlari kam.
+            level: "info",
             // Loglar endi MAIN clusterga yoziladi (multibot: umumiy narsalar shu yerda).
             // dbName aniq ko'rsatiladi — MAIN URI da yo'l qismi yo'q, usiz "test" ga yozardi.
             db: CONFIG.MONGO_URI_MAIN,
             dbName: "dodakino",
             collection: "server_logs",
-            expireAfterSeconds: 72 * 60 * 60,
+            // Loglar 7 kun saqlanadi, keyin MongoDB o'zi o'chiradi.
+            // (Ilgari 72 soat edi — panel filtrlari 3/5/7 kun bo'lgani uchun
+            // eng uzuni bilan tenglashtirildi.)
+            expireAfterSeconds: 604800,
             format: combine(
                 timestamp(),
                 json()
