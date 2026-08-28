@@ -5,3 +5,10 @@ node_modules
 public/uploads
 src/storage
 *.log
+
+# Sinov paytida qolib ketadigan fayllar — ular repoga TUSHMASLIGI kerak.
+# j2.txt curl'ning cookie fayli edi va ichida superadmin refreshToken'i bor edi.
+*.exe
+cookies.txt
+cookie*.txt
+j*.txt
