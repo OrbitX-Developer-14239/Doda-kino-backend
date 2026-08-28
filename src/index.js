@@ -145,6 +145,11 @@ if (!CONFIG.IS_PRODUCTION || CONFIG.ENABLE_SWAGGER) {
 // Ular tenant middleware'dan OLDIN turadi — birorta botning bazasi yotib
 // qolsa ham admin panel login va loglar ishlashda davom etadi.
 app.use("/api/admin", adminRouter)
+// Panel ham, Swagger hujjati ham /api/logs (ko'plik) deb chaqiradi —
+// mount esa /api/log da edi, shu sababli panel 404 olardi.
+// Eski birlik shakli alias sifatida qoldirildi (undan foydalanayotgan
+// mijozlar buzilmasin).
+app.use("/api/logs", logsRouter)
 app.use("/api/log", logsRouter)
 app.use("/api/instagram", instagramRouter)
 
