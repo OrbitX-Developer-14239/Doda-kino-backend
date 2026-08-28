@@ -9,62 +9,80 @@ const parseList = (value) =>
 /**
  * Bot konfiguratsiyalari (multitenant).
  *
- * Har bot IKKI clusterga ega: content (films, episodes) va data (users,
- * channels, discovered chats). botId Telegram bot ID si — token boshidagi
- * raqam. Yangi bot qo'shish = .env ga TOKEN + 2 ta URI qo'shish.
+ * Har bot IKKI ulanishga ega:
+ *   content — films, episodes
+ *   data    — users, channels, discoveredchats
+ *
+ * IKKI BOT BITTA KONTENTNI BO'LISHISHI MUMKIN: contentUri (va contentDb)
+ * bir xil bo'lsa, ular bitta film bazasidan o'qiydi. Masalan "Doda Kino"
+ * va "Mega Filmlar" — filmlari bir xil, lekin foydalanuvchilari va
+ * majburiy kanallari alohida (dataDb boshqa).
+ *
+ * Baza nomi (dbName) ham sozlanadi: yangi Atlas cluster ochmasdan,
+ * MAVJUD cluster ichida boshqa baza ishlatish mumkin (512 MB kvota
+ * cluster bo'yicha, baza bo'yicha emas).
+ *
+ * Yangi bot qo'shish = .env ga BOTn_TOKEN + URI lar + CHANNEL_IDn.
  */
+const DEFAULT_DB = "dodakino";
+const MAX_BOTS = 10;
+
 const parseBots = () => {
-    const defs = [
-        {
-            token: process.env.BOT1_TOKEN,
-            contentUri: process.env.MONGO_URI1,
-            dataUri: process.env["MONGO_URI1.1"],
-            channelId: process.env.CHANNEL_ID1 || process.env.CHANNEL_ID,
-        },
-        {
-            token: process.env.BOT2_TOKEN,
-            contentUri: process.env.MONGO_URI_BOT2,
-            dataUri: process.env["MONGO_URI_BOT2.1"],
-            channelId: process.env.CHANNEL_ID2,
-        },
-        {
-            token: process.env.BOT3_TOKEN,
-            contentUri: process.env.MONGO_URI_BOT3,
-            dataUri: process.env["MONGO_URI_BOT3.1"],
-            channelId: process.env.CHANNEL_ID3,
-        },
-    ];
-
     const bots = [];
-    for (const [i, def] of defs.entries()) {
-        // Token ham, URI lar ham bo'lmasa — bu o'rin ishlatilmayapti, jimgina o'tamiz
-        if (!def.token && !def.contentUri && !def.dataUri) continue;
 
-        if (!def.token || !def.contentUri || !def.dataUri) {
+    for (let i = 1; i <= MAX_BOTS; i++) {
+        const token = process.env[`BOT${i}_TOKEN`];
+
+        // Birinchi bot uchun eski nomlar saqlanadi (MONGO_URI1 / MONGO_URI1.1),
+        // qolganlari MONGO_URI_BOTn / MONGO_URI_BOTn.1 ko'rinishida.
+        const contentUri = i === 1
+            ? process.env.MONGO_URI1
+            : process.env[`MONGO_URI_BOT${i}`];
+        const dataUri = i === 1
+            ? process.env["MONGO_URI1.1"]
+            : process.env[`MONGO_URI_BOT${i}.1`];
+
+        const channelId = process.env[`CHANNEL_ID${i}`] || (i === 1 ? process.env.CHANNEL_ID : null);
+
+        if (!token && !contentUri && !dataUri) continue;   // bu o'rin ishlatilmayapti
+
+        if (!token || !contentUri || !dataUri) {
             console.warn(
-                `[Config] ${i + 1}-bot chala sozlangan (token/contentUri/dataUri dan biri yo'q) — o'tkazib yuborildi.`
+                `[Config] ${i}-bot chala sozlangan (token/contentUri/dataUri dan biri yo'q) — o'tkazib yuborildi.`
             );
             continue;
         }
 
-        const botId = Number(def.token.split(":")[0]);
+        const botId = Number(String(token).split(":")[0]);
         if (!Number.isFinite(botId) || botId <= 0) {
-            console.warn(`[Config] ${i + 1}-bot tokeni yaroqsiz ko'rinadi — o'tkazib yuborildi.`);
+            console.warn(`[Config] ${i}-bot tokeni yaroqsiz ko'rinadi — o'tkazib yuborildi.`);
             continue;
         }
 
-        // Atlas URI ichida to'ldirilmagan namuna qolib ketgan bo'lsa
+        // Atlas URI sida to'ldirilmagan namuna qolib ketgan bo'lsa
         // (masalan "<db_username>") ulanish baribir yiqiladi — oldindan aytamiz.
-        for (const uri of [def.contentUri, def.dataUri]) {
-            if (/<[^>]+>/.test(uri)) {
+        for (const uri of [contentUri, dataUri]) {
+            const hole = String(uri).match(/<[^>]+>/);
+            if (hole) {
                 console.warn(
-                    `[Config] ${i + 1}-bot (${botId}) URI sida to'ldirilmagan joy bor: "${uri.match(/<[^>]+>/)[0]}". Ulanish muvaffaqiyatsiz bo'ladi.`
+                    `[Config] ${i}-bot (${botId}) URI sida to'ldirilmagan joy bor: "${hole[0]}". Ulanish muvaffaqiyatsiz bo'ladi.`
                 );
             }
         }
 
-        bots.push({ botId, ...def });
+        bots.push({
+            botId,
+            token,
+            contentUri,
+            dataUri,
+            // Bitta clusterda bir nechta baza bo'lishi mumkin — shuning uchun
+            // guruhlash URI + baza nomi bo'yicha aniqlanadi.
+            contentDb: process.env[`BOT${i}_CONTENT_DB`] || DEFAULT_DB,
+            dataDb: process.env[`BOT${i}_DATA_DB`] || DEFAULT_DB,
+            channelId,
+        });
     }
+
     return bots;
 };
 

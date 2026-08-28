@@ -6,10 +6,10 @@ export const CONNECTION_OPTIONS = {
     minPoolSize: 2,
     serverSelectionTimeoutMS: 10_000,
     socketTimeoutMS: 45_000,
-    // Hamma clusterda bir xil baza nomi ishlatiladi. Bu ayniqsa yangi
-    // clusterlar uchun muhim: ularning URI sida yo'l qismi yo'q va usiz
-    // Mongoose hammasini "test" bazasiga yozib yuborardi.
-    dbName: "dodakino",
+    // Baza nomi ATAYLAB bu yerda yo'q — u har ulanish uchun alohida
+    // beriladi (tenant-registry). Ikki bot bitta clusterda, lekin turli
+    // bazalarda ishlashi mumkin. URI larda yo'l qismi bo'lmagani uchun
+    // dbName ko'rsatilmasa Mongoose "test" bazasiga yozib yuboradi.
     // Production da indekslar har ishga tushishda avtomatik yaratilmaydi —
     // buning uchun alohida `npm run sync-indexes` buyrug'i bor.
     autoIndex: !CONFIG.IS_PRODUCTION,
@@ -21,7 +21,10 @@ export const CONNECTION_OPTIONS = {
  *
  * Har botning o'z clusterlariga ulanish core/tenant-registry.js da.
  */
-export const mainConn = mongoose.createConnection(CONFIG.MONGO_URI_MAIN, CONNECTION_OPTIONS);
+export const mainConn = mongoose.createConnection(CONFIG.MONGO_URI_MAIN, {
+    ...CONNECTION_OPTIONS,
+    dbName: "dodakino",
+});
 
 export const connectDB = async () => {
     try {

@@ -32,10 +32,10 @@ const tenants = new Map();
 let defaultTenantId = null;
 
 const buildTenant = (botCfg) => {
-    const { botId, token, contentUri, dataUri, channelId } = botCfg;
+    const { botId, token, contentUri, dataUri, contentDb, dataDb, channelId } = botCfg;
 
-    const contentConn = mongoose.createConnection(contentUri, CONNECTION_OPTIONS);
-    const dataConn = mongoose.createConnection(dataUri, CONNECTION_OPTIONS);
+    const contentConn = mongoose.createConnection(contentUri, { ...CONNECTION_OPTIONS, dbName: contentDb });
+    const dataConn = mongoose.createConnection(dataUri, { ...CONNECTION_OPTIONS, dbName: dataDb });
 
     const models = {
         Film: contentConn.model("Film", FilmSchema),
@@ -49,6 +49,11 @@ const buildTenant = (botCfg) => {
         botId,
         token,
         channelId: channelId || null,
+        // Kontent manbasining o'ziga xos belgisi. IKKI BOT bir xil belgiga
+        // ega bo'lsa, ular AYNI film bazasidan o'qiydi ("Doda Kino" va
+        // "Mega Filmlar" kabi). Kesh bekor qilishda shu belgi bo'yicha
+        // guruhdoshlar ham tozalanadi.
+        contentKey: `${contentUri}::${contentDb}`,
         contentConn,
         dataConn,
         models,
@@ -85,7 +90,7 @@ export const initTenants = async () => {
                 ]);
                 tenant.active = true;
                 logger.info(
-                    `[Tenant] Bot ${tenant.botId} ulandi: content=${tenant.contentConn.host}, data=${tenant.dataConn.host}`
+                    `[Tenant] Bot ${tenant.botId} ulandi: content=${tenant.contentConn.host}/${tenant.contentConn.name}, data=${tenant.dataConn.host}/${tenant.dataConn.name}`
                 );
             } catch (error) {
                 tenant.active = false;
@@ -96,10 +101,35 @@ export const initTenants = async () => {
         })
     );
 
+    // Kontentni bo'lishayotgan botlarni loglaymiz — noto'g'ri sozlash
+    // (masalan URI da xato) darhol ko'rinib tursin.
+    const groups = new Map();
+    for (const t of tenants.values()) {
+        if (!groups.has(t.contentKey)) groups.set(t.contentKey, []);
+        groups.get(t.contentKey).push(t.botId);
+    }
+    for (const ids of groups.values()) {
+        if (ids.length > 1) {
+            logger.info(`[Tenant] Bitta film bazasini bo'lishayotgan botlar: ${ids.join(", ")}`);
+        }
+    }
+
     return [...tenants.values()];
 };
 
 export const getTenant = (botId) => tenants.get(String(botId)) || null;
+
+/**
+ * Shu bot bilan BIR XIL film bazasidan o'qiydigan botlar (o'zi ham kiradi).
+ *
+ * Kesh bekor qilishda kerak: admin filmni tahrirlaganda faqat bitta botning
+ * Redis kalitlari tozalansa, guruhdosh bot eskirgan ma'lumotni TTL tugagunicha
+ * ko'rsatib turardi.
+ */
+export const contentSiblings = (tenant) => {
+    if (!tenant?.contentKey) return tenant ? [tenant] : [];
+    return [...tenants.values()].filter((t) => t.contentKey === tenant.contentKey);
+};
 
 export const getDefaultTenant = () =>
     defaultTenantId ? tenants.get(defaultTenantId) : null;

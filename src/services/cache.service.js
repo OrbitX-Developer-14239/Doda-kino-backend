@@ -1,6 +1,7 @@
 import { createClient } from "redis";
 import { CONFIG } from "../config/index.js";
 import { currentTenant } from "../core/tenant-context.js";
+import { contentSiblings } from "../core/tenant-registry.js";
 
 /**
  * ============================================
@@ -110,9 +111,25 @@ class CacheService {
         return keys || null;
     }
 
-    async bumpVersion() {
+    /**
+     * Film/epizod keshini bekor qilishda ishlatiladigan kalit to'plamlari.
+     *
+     * Bir xil film bazasidan o'qiydigan HAMMA botniki qaytariladi: aks holda
+     * "Mega Filmlar" da tahrirlangan film "Doda Kino" da eskiligicha qolardi.
+     * Kanallar bunga kirmaydi — ular har botda alohida.
+     */
+    _contentKeys() {
+        const tenant = currentTenant();
+        if (!tenant) {
+            console.warn("[Cache] Tenant konteksti yo'q — invalidatsiya o'tkazib yuborildi");
+            return [];
+        }
+        return contentSiblings(tenant).map((t) => t.keys);
+    }
+
+    async bumpVersion(keySet = null) {
         if (!this.isReady || !this.client) return;
-        const keys = this._keys();
+        const keys = keySet || this._keys();
         if (!keys) return;
         try {
             await this.client.incr(keys.version());
@@ -153,9 +170,13 @@ class CacheService {
 
     async invalidateFilm(film, next = null) {
         if (!film && !next) return;
-        const K = this._keys();
-        if (!K) return;
 
+        for (const K of this._contentKeys()) {
+            await this._invalidateFilmFor(K, film, next);
+        }
+    }
+
+    async _invalidateFilmFor(K, film, next) {
         const keys = new Set();
         for (const f of [film, next].filter(Boolean)) {
             if (f.code !== undefined && f.code !== null) keys.add(K.film(f.code));
@@ -171,7 +192,7 @@ class CacheService {
         // Ro'yxat va qidiruv natijalari ham eskirdi
         await this.delByPattern(K.patterns.allFilmPages);
         await this.delByPattern(K.patterns.allSearches);
-        await this.bumpVersion();
+        await this.bumpVersion(K);
     }
 
     /**
@@ -179,9 +200,12 @@ class CacheService {
      * film hujjati ichida qismlar nusxasi va episodesCount saqlanadi.
      */
     async invalidateEpisode(episode, next = null, filmCode = null, filmName = null) {
-        const K = this._keys();
-        if (!K) return;
+        for (const K of this._contentKeys()) {
+            await this._invalidateEpisodeFor(K, episode, next, filmCode, filmName);
+        }
+    }
 
+    async _invalidateEpisodeFor(K, episode, next, filmCode, filmName) {
         const keys = new Set();
         for (const e of [episode, next].filter(Boolean)) {
             if (e.code !== undefined && e.code !== null) keys.add(K.episode(e.code));
@@ -193,7 +217,7 @@ class CacheService {
         await this.del([...keys]);
         await this.delByPattern(K.patterns.allFilmPages);
         await this.delByPattern(K.patterns.allSearches);
-        await this.bumpVersion();
+        await this.bumpVersion(K);
     }
 }
 
