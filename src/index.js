@@ -13,6 +13,7 @@ import instagramRouter from "./routes/instagram.route.js"
 import adminRouter from "./routes/admin.route.js"
 import logsRouter from "./routes/logs.route.js"
 import statisticsRouter from "./routes/statistics.route.js"
+import broadcastRouter from "./routes/broadcast.route.js"
 
 import { CONFIG } from "./config/index.js"
 import { logger } from "./utils/logger.js"
@@ -152,6 +153,9 @@ app.use("/api/admin", adminRouter)
 app.use("/api/logs", logsRouter)
 app.use("/api/log", logsRouter)
 app.use("/api/instagram", instagramRouter)
+// Reklama tarqatish ATAYLAB tenant middleware dan OLDIN: bitta tarqatma
+// bir nechta botning foydalanuvchilarini qamraydi.
+app.use("/api/broadcast", broadcastRouter)
 
 // ── MULTIBOT yo'llar ────────────────────────────────────────────────────────
 // /api/<botId>/film/...  -> ko'rsatilgan bot

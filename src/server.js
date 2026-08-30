@@ -5,6 +5,7 @@ import { connectDB, mainConn } from "./config/db.js";
 import { initTenants, allTenants, closeTenants } from "./core/tenant-registry.js";
 import { AdminService } from "./services/admin.service.js";
 import { BotService } from "./services/bot.service.js";
+import { BroadcastService } from "./services/broadcast.service.js";
 // ai.service.js (vektor qidiruv) ATAYLAB import qilinmaydi — u ~1.1 GB
 // RAM egallaydi. Qidiruv endi xotiradagi indeks + Groq orqali ishlaydi.
 import { initSocket, closeSocket } from "./socket.js";
@@ -73,7 +74,17 @@ const startServer = async () => {
             logger.warn(`Bot registrini yangilab bo'lmadi: ${error.message}`);
         });
 
-        // 2) Har faol botning qidiruv indeksi
+        // 2) Reklama rejalashtiruvchisi: muddati kelgan takrorlarni bajaradi.
+        // Takrorlar orasi soatlab bo'lgani uchun daqiqada bir marta qarash yetarli.
+        // Holat bazada turadi — server qayta yuklansa ham tarqatma yo'qolmaydi.
+        const broadcastTimer = setInterval(() => {
+            BroadcastService.runDue().catch((error) => {
+                logger.error("Reklama rejalashtiruvchisi xatosi: " + error.message);
+            });
+        }, 60000);
+        broadcastTimer.unref();
+
+        // 3) Har faol botning qidiruv indeksi
         for (const tenant of allTenants()) {
             if (!tenant.active) continue;
             tenant.searchIndex.init()

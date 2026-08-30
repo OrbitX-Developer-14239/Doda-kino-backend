@@ -5,12 +5,19 @@ export const userSchema = new Schema({
     telegram_id: { type: String, required: true, unique: true },
     first_name: { type: String },
     username: { type: String },
-    channels_condition: { type: Array, default: [] }
+    channels_condition: { type: Array, default: [] },
+
+    // Foydalanuvchi botni bloklagan (Telegram 403 qaytargan).
+    // Reklama tarqatishda bunday foydalanuvchilar butunlay o'tkazib
+    // yuboriladi — aks holda har tarqatmada minglab befoyda so'rov ketardi.
+    blocked: { type: Boolean, default: false },
 }, { timestamps: true });
 
 // Admin panelidagi foydalanuvchilar ro'yxati createdAt bo'yicha saralaydi,
 // kanal statistikasi esa channels_condition bo'yicha filtrlaydi.
 userSchema.index({ createdAt: -1 });
+// Reklama tarqatish bloklanmaganlar bo'yicha yuradi
+userSchema.index({ blocked: 1, _id: 1 });
 userSchema.index({ "channels_condition.telegram_id": 1, "channels_condition.is_member": 1 });
 
 // Sxema tenant-registry da har botning O'Z ulanishiga bog'lanadi.
