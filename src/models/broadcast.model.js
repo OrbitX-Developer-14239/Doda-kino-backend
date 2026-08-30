@@ -51,6 +51,10 @@ const BroadcastSchema = new Schema({
     // Kim boshlagani (kanal administratori)
     createdBy: { type: Object, default: null },
 
+    // Hisobotni kim yozadi. Reklama kanaliga javob qaytarish uchun
+    // O'SHA kanalda turgan bot kerak — tarqatmani boshlagan bot.
+    reporterBotId: { type: Number, default: null },
+
     runs: { type: [RunSchema], default: [] },
 }, { timestamps: true });
 

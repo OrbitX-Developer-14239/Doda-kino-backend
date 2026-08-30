@@ -9,7 +9,11 @@ export const BroadcastController = {
     }),
 
     create: catchAsync(async (req, res) => {
-        const data = await BroadcastService.create(req.body);
+        const data = await BroadcastService.create({
+            ...req.body,
+            // Hisobot o'sha kanalda turgan bot orqali qaytariladi
+            reporterBotId: req.bot?.botId ?? null,
+        });
         res.status(201).json({
             success: true,
             data: {

@@ -44,7 +44,7 @@ export const BroadcastService = {
         return out;
     },
 
-    async create({ sourceChatId, sourceMessageId, botIds, totalRuns, intervalHours, createdBy }) {
+    async create({ sourceChatId, sourceMessageId, botIds, totalRuns, intervalHours, createdBy, reporterBotId }) {
         const known = new Set(allTenants().map((t) => t.botId));
         const targets = [...new Set((botIds || []).map(Number))].filter((id) => known.has(id));
 
@@ -62,6 +62,7 @@ export const BroadcastService = {
             intervalHours: Number(intervalHours) || 0,
             nextRunAt: new Date(),      // birinchi yuborish darhol
             createdBy: createdBy || null,
+            reporterBotId: reporterBotId || null,
         });
 
         logger.info(
@@ -159,6 +160,57 @@ export const BroadcastService = {
             `bloklagan: ${run.blocked}` +
             (fresh.status === "done" ? " (tugadi)" : ` (keyingisi: ${fresh.nextRunAt.toISOString()})`)
         );
+
+        await this._report(fresh, run).catch((e) =>
+            logger.warn(`[Reklama] Hisobot yuborilmadi: ${e.message}`)
+        );
+    },
+
+    /**
+     * Reklama kanalidagi ASL POSTGA javob qilib natijani yozadi.
+     *
+     * Hisobotni tarqatmani boshlagan bot yuboradi — faqat u reklama
+     * kanalida turadi. Boshqa botlar u yerga yoza olmaydi va yozishi
+     * ham shart emas.
+     */
+    async _report(job, run) {
+        const reporter = getTenant(job.reporterBotId);
+        if (!reporter?.active) return;
+
+        const nice = (n) => Number(n).toLocaleString("uz-UZ");
+
+        const perBot = run.perBot
+            .map((b) => {
+                const t = getTenant(b.botId);
+                const name = t?.username ? `@${t.username}` : b.botId;
+                return `${name} — ${nice(b.sent)} ta`;
+            })
+            .join("\n");
+
+        const isLast = job.status === "done";
+
+        const header = isLast
+            ? "🏁 <b>Tarqatish tugadi</b>"
+            : `✅ <b>${job.runsDone}/${job.totalRuns}-yuborish tugadi</b>`;
+
+        const tail = isLast
+            ? ""
+            : `\n\n⏭ <i>Keyingisi: ${job.intervalHours} soatdan keyin</i>`;
+
+        const text =
+            `${header}\n\n` +
+            `<blockquote><b>📤 Yuborildi:</b> ${nice(run.sent)} ta foydalanuvchiga\n` +
+            `<b>🚫 Bloklagan:</b> ${nice(run.blocked)}\n` +
+            `<b>⚠️ Xato:</b> ${nice(run.failed)}</blockquote>\n\n` +
+            `<blockquote>${perBot}</blockquote>${tail}`;
+
+        await reporter.api.sendMessage(job.sourceChatId, text, {
+            parse_mode: "HTML",
+            reply_parameters: {
+                message_id: job.sourceMessageId,
+                allow_sending_without_reply: true,
+            },
+        });
     },
 
     /** Bitta botning barcha foydalanuvchilariga yuboradi */
