@@ -25,6 +25,24 @@ const BATCH_SIZE = 25;          // bir vaqtda nechta xabar
 const BATCH_PAUSE_MS = 1100;    // to'plamlar orasidagi tanaffus
 const MAX_RETRY_WAIT_S = 60;    // 429 da bundan uzoq kutilmaydi
 
+/**
+ * Reklama YUBORILMAYDIGAN foydalanuvchilar.
+ *
+ * VAQTINCHA shu yerda qattiq yozilgan — keyinchalik bazaga (yoki panelga)
+ * ko'chiriladi va dinamik boshqariladi. Shu sababli ro'yxat bitta joyda
+ * turibdi: ko'chirishda faqat shu qiymatni almashtirish kifoya.
+ *
+ * telegram_id bazada SATR sifatida saqlanadi — solishtirish ishlashi uchun
+ * bu yerda ham satr bo'lishi shart.
+ */
+const EXCLUDED_USER_IDS = ["791067564", "5151295739"];
+
+/** Reklama oladigan foydalanuvchilar uchun umumiy filtr */
+const audienceFilter = () => ({
+    blocked: { $ne: true },
+    telegram_id: { $nin: EXCLUDED_USER_IDS },
+});
+
 let isRunning = false;          // rejalashtiruvchi o'zini bosib ketmasin
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,7 +55,7 @@ export const BroadcastService = {
             if (!tenant.active) continue;
             let users = 0;
             try {
-                users = await tenant.models.User.countDocuments({ blocked: { $ne: true } });
+                users = await tenant.models.User.countDocuments(audienceFilter());
             } catch { /* baza javob bermasa 0 ko'rsatamiz */ }
             out.push({ botId: tenant.botId, username: tenant.username, users });
         }
@@ -219,7 +237,7 @@ export const BroadcastService = {
 
         // Kursor bilan: 55 000 foydalanuvchini birdan xotiraga olmaymiz
         const cursor = tenant.models.User
-            .find({ blocked: { $ne: true } })
+            .find(audienceFilter())
             .select("telegram_id")
             .lean()
             .cursor();
