@@ -20,6 +20,11 @@ export const createUserValidation = z.object({
         first_name: z.string().max(200).optional(),
         username: z.string().max(200).optional(),
         channels_condition: z.array(channelCondition).max(100).optional(),
+
+        // Odam botga O'ZI yozganmi. Faqat shu bayroq bilan kelgan so'rov
+        // yangi foydalanuvchi YARATADI — kanalga qo'shilish hodisasi esa
+        // mavjud yozuvni yangilaydi, xolos.
+        started: z.boolean().optional(),
     }).strip(),
 });
 
