@@ -280,10 +280,24 @@ export const BroadcastService = {
                 return this._sendOne(tenant, job, userId, stat, attempt + 1);
             }
 
-            // 403 — foydalanuvchi botni bloklagan yoki o'chirgan
+            // 403 IKKI XIL ma'noda keladi — matnidan ajratamiz:
+            //
+            //   "bot was blocked by the user"          -> haqiqatan bloklagan
+            //   "bot can't initiate conversation..."   -> botga hech qachon yozmagan
+            //   "user is deactivated"                  -> akkaunt o'chirilgan
+            //
+            // Ilgari hammasi "bloklagan" deb sanalardi va hisobot chalg'itardi:
+            // 363 ta "bloklagan" ning 345 tasi aslida botni ochmagan odamlar edi.
             if (code === 403) {
-                stat.blocked++;
-                this._markUser(tenant, userId, { blocked: true });
+                const neverStarted = /can't initiate conversation|user is deactivated|bot was kicked/i.test(desc);
+
+                if (neverStarted) {
+                    stat.unreachable++;
+                    this._markUser(tenant, userId, { unreachable: true });
+                } else {
+                    stat.blocked++;
+                    this._markUser(tenant, userId, { blocked: true });
+                }
                 return;
             }
 
