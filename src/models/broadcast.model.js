@@ -23,6 +23,8 @@ const RunSchema = new Schema({
     sent: { type: Number, default: 0 },
     failed: { type: Number, default: 0 },
     blocked: { type: Number, default: 0 },
+    // Botga hech qachon yozmagan (kanaldan kelgan) yozuvlar
+    unreachable: { type: Number, default: 0 },
     // Har bot bo'yicha alohida: { botId, sent, failed, blocked }
     perBot: { type: Array, default: [] },
 }, { _id: false });

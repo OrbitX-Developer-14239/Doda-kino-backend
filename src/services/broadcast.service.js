@@ -40,6 +40,7 @@ const EXCLUDED_USER_IDS = ["791067564", "5151295739"];
 /** Reklama oladigan foydalanuvchilar uchun umumiy filtr */
 const audienceFilter = () => ({
     blocked: { $ne: true },
+    unreachable: { $ne: true },
     telegram_id: { $nin: EXCLUDED_USER_IDS },
 });
 
@@ -140,7 +141,7 @@ export const BroadcastService = {
         job.status = "running";
         await job.save();
 
-        const run = { startedAt: new Date(), sent: 0, failed: 0, blocked: 0, perBot: [] };
+        const run = { startedAt: new Date(), sent: 0, failed: 0, blocked: 0, unreachable: 0, perBot: [] };
         logger.info(`[Reklama] ${job._id} — ${job.runsDone + 1}/${job.totalRuns}-yuborish boshlandi`);
 
         for (const botId of job.botIds) {
@@ -154,6 +155,7 @@ export const BroadcastService = {
             run.sent += stat.sent;
             run.failed += stat.failed;
             run.blocked += stat.blocked;
+            run.unreachable += stat.unreachable;
             run.perBot.push({ botId, ...stat });
         }
 
@@ -219,6 +221,7 @@ export const BroadcastService = {
             `${header}\n\n` +
             `<blockquote><b>📤 Yuborildi:</b> ${nice(run.sent)} ta foydalanuvchiga\n` +
             `<b>🚫 Bloklagan:</b> ${nice(run.blocked)}\n` +
+            `<b>👻 Botga yozmagan:</b> ${nice(run.unreachable || 0)}\n` +
             `<b>⚠️ Xato:</b> ${nice(run.failed)}</blockquote>\n\n` +
             `<blockquote>${perBot}</blockquote>${tail}`;
 
@@ -233,7 +236,7 @@ export const BroadcastService = {
 
     /** Bitta botning barcha foydalanuvchilariga yuboradi */
     async _sendToTenant(tenant, job) {
-        const stat = { sent: 0, failed: 0, blocked: 0 };
+        const stat = { sent: 0, failed: 0, blocked: 0, unreachable: 0 };
 
         // Kursor bilan: 55 000 foydalanuvchini birdan xotiraga olmaymiz
         const cursor = tenant.models.User
@@ -268,6 +271,7 @@ export const BroadcastService = {
             stat.sent++;
         } catch (error) {
             const code = error?.error_code ?? error?.parameters?.error_code;
+            const desc = String(error?.description || error?.message || "");
             const retryAfter = error?.parameters?.retry_after;
 
             // 429 — juda tez yubordik, Telegram kutishni so'rayapti
@@ -276,18 +280,35 @@ export const BroadcastService = {
                 return this._sendOne(tenant, job, userId, stat, attempt + 1);
             }
 
-            // 403 — foydalanuvchi botni bloklagan yoki o'chirgan.
-            // Belgilab qo'yamiz: keyingi tarqatmalarda umuman urinmaymiz.
+            // 403 — foydalanuvchi botni bloklagan yoki o'chirgan
             if (code === 403) {
                 stat.blocked++;
-                tenant.models.User.updateOne(
-                    { telegram_id: String(userId) },
-                    { $set: { blocked: true } }
-                ).catch(() => { });
+                this._markUser(tenant, userId, { blocked: true });
+                return;
+            }
+
+            // 400 "chat not found" — bu odam botga HECH QACHON yozmagan.
+            // Bunday yozuvlar majburiy obuna kanaliga qo'shilganlardan
+            // paydo bo'ladi: bot ularni bazaga yozadi, lekin Telegram
+            // qoidasi bo'yicha suhbatni BOT boshlay olmaydi.
+            //
+            // Belgilab qo'yamiz — aks holda HAR tarqatmada o'sha o'n
+            // minglab yozuvga befoyda so'rov ketaveradi va tarqatma
+            // soatlab cho'ziladi.
+            if (code === 400 && /chat not found|user is deactivated|PEER_ID_INVALID/i.test(desc)) {
+                stat.unreachable++;
+                this._markUser(tenant, userId, { unreachable: true });
                 return;
             }
 
             stat.failed++;
         }
+    },
+
+    /** Foydalanuvchi holatini belgilaydi (yuborishni sekinlashtirmasin) */
+    _markUser(tenant, userId, patch) {
+        tenant.models.User
+            .updateOne({ telegram_id: String(userId) }, { $set: patch })
+            .catch(() => { });
     },
 };
