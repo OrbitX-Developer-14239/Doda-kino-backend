@@ -89,10 +89,25 @@ export const UserService = {
             body.channels_condition = Array.from(mergedMap.values());
         }
 
+        // YARATISH faqat odam botga O'ZI yozganda (started: true).
+        //
+        // Kanalga qo'shilish hodisasi yangi yozuv YARATMAYDI: bunday odam
+        // botga hech qachon yozmagan, unga xabar ham yubora olmaymiz.
+        // Ilgari bunday holatda ham upsert ishlagani uchun bazada 56 000 ta
+        // fantom yozuv to'plangan edi — ular boshqa odamlarning botlaridan
+        // majburiy obuna kanaliga kelganlar edi.
+        //
+        // MAVJUD foydalanuvchi esa yangilanaveradi: haqiqiy foydalanuvchi
+        // kanaldan chiqsa, buni bilishimiz shart (media qulflanadi va
+        // obuna qaytadan so'raladi).
+        const isRealUser = body.started === true;
+
         const data = await UserModel.findOneAndUpdate(
             byTelegramId(body.telegram_id),
-            { ...buildUpdateDoc(body), $setOnInsert: byTelegramId(body.telegram_id) },
-            { returnDocument: "after", upsert: true, runValidators: true }
+            isRealUser
+                ? { ...buildUpdateDoc(body), $setOnInsert: byTelegramId(body.telegram_id) }
+                : buildUpdateDoc(body),
+            { returnDocument: "after", upsert: isRealUser, runValidators: true }
         ).lean()
         return data
     },
