@@ -39,9 +39,15 @@ const EXCLUDED_USER_IDS = ["791067564", "5151295739"];
 
 /**
  * YUBORISH filtri — kimga haqiqatan xabar ketadi.
- * Bloklaganlar chiqarib tashlanadi: ularga yuborish har doim xato beradi.
+ *
+ * started: true — ENG MUHIM shart. Bazadagi yozuvlarning ko'pchiligi
+ * majburiy obuna kanaliga qo'shilgan odamlardan paydo bo'ladi; ular botga
+ * hech qachon yozmagan va Telegram qoidasi bo'yicha bot ularga birinchi
+ * bo'lib yoza olmaydi. Ularni chiqarib tashlamasak, har tarqatmada o'n
+ * minglab befoyda so'rov ketardi.
  */
 const audienceFilter = () => ({
+    started: true,
     blocked: { $ne: true },
     unreachable: { $ne: true },
     telegram_id: { $nin: EXCLUDED_USER_IDS },
@@ -51,14 +57,13 @@ const audienceFilter = () => ({
  * KO'RSATISH filtri — tanlash oynasida qaysi raqam chiqadi.
  *
  * Bloklaganlar ham SANALADI: ular baribir botni bir marta ochgan,
- * ya'ni haqiqiy auditoriyaning bir qismi. Faqat botga hech qachon
- * yozmaganlar (kanaldan kelib qolgan yozuvlar) sanalmaydi — aks holda
- * raqam 56 ming bo'lib chiqib, hech qanday ma'no bermasdi.
- *
- * Shu sababli ko'rsatilgan son yuborilganidan biroz katta bo'lishi
- * mumkin — farqi hisobotdagi "Bloklagan" ustunida ko'rinadi.
+ * ya'ni haqiqiy auditoriyaning bir qismi. Yuborishda esa ularga
+ * urinilmaydi (Telegram xato qaytaradi), shuning uchun ko'rsatilgan son
+ * yuborilganidan biroz katta bo'lishi mumkin — farqi hisobotdagi
+ * "Bloklagan" ustunida ko'rinadi.
  */
 const audienceCountFilter = () => ({
+    started: true,
     unreachable: { $ne: true },
     telegram_id: { $nin: EXCLUDED_USER_IDS },
 });

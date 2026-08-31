@@ -2,7 +2,7 @@ import { UserModel } from "../models/user.model.js";
 import { ChannelService } from "./channel.service.js";
 
 // Faqat shu maydonlarni yozishga ruxsat (mass assignment ga qarshi)
-const WRITABLE_FIELDS = ["first_name", "username", "channels_condition"];
+const WRITABLE_FIELDS = ["first_name", "username", "channels_condition", "started"];
 
 const buildUpdateDoc = (body) => {
     const $set = {};
@@ -21,6 +21,9 @@ const byTelegramId = (value) => ({ telegram_id: String(value) });
 
 export const UserService = {
     async createUser(body) {
+        // Bu metod faqat /start dan chaqiriladi — demak odam botga O'ZI yozgan
+        body = { ...body, started: true };
+
         const data = await UserModel.findOneAndUpdate(
             byTelegramId(body.telegram_id),
             { ...buildUpdateDoc(body), $setOnInsert: byTelegramId(body.telegram_id) },

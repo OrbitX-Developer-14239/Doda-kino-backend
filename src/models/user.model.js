@@ -10,6 +10,12 @@ export const userSchema = new Schema({
     // Foydalanuvchi botni bloklagan (Telegram 403 qaytargan).
     // Reklama tarqatishda bunday foydalanuvchilar butunlay o'tkazib
     // yuboriladi — aks holda har tarqatmada minglab befoyda so'rov ketardi.
+    // Foydalanuvchi BOTGA o'zi yozganmi (start bosgan yoki bot bilan muloqot qilgan).
+    // false = yozuv majburiy obuna kanaliga qo'shilish orqali paydo bo'lgan:
+    // bunday odamga bot xabar yubora OLMAYDI (Telegram suhbatni bot boshlashiga
+    // ruxsat bermaydi). Reklama faqat started=true bo'lganlarga boradi.
+    started: { type: Boolean, default: false },
+
     blocked: { type: Boolean, default: false },
 
     // Botga hech qachon YOZMAGAN foydalanuvchi. Bunday yozuvlar majburiy
@@ -24,7 +30,7 @@ export const userSchema = new Schema({
 // kanal statistikasi esa channels_condition bo'yicha filtrlaydi.
 userSchema.index({ createdAt: -1 });
 // Reklama tarqatish bloklanmaganlar bo'yicha yuradi
-userSchema.index({ blocked: 1, unreachable: 1, _id: 1 });
+userSchema.index({ started: 1, blocked: 1, unreachable: 1, _id: 1 });
 userSchema.index({ "channels_condition.telegram_id": 1, "channels_condition.is_member": 1 });
 
 // Sxema tenant-registry da har botning O'Z ulanishiga bog'lanadi.
