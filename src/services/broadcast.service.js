@@ -37,9 +37,28 @@ const MAX_RETRY_WAIT_S = 60;    // 429 da bundan uzoq kutilmaydi
  */
 const EXCLUDED_USER_IDS = ["791067564", "5151295739"];
 
-/** Reklama oladigan foydalanuvchilar uchun umumiy filtr */
+/**
+ * YUBORISH filtri — kimga haqiqatan xabar ketadi.
+ * Bloklaganlar chiqarib tashlanadi: ularga yuborish har doim xato beradi.
+ */
 const audienceFilter = () => ({
     blocked: { $ne: true },
+    unreachable: { $ne: true },
+    telegram_id: { $nin: EXCLUDED_USER_IDS },
+});
+
+/**
+ * KO'RSATISH filtri — tanlash oynasida qaysi raqam chiqadi.
+ *
+ * Bloklaganlar ham SANALADI: ular baribir botni bir marta ochgan,
+ * ya'ni haqiqiy auditoriyaning bir qismi. Faqat botga hech qachon
+ * yozmaganlar (kanaldan kelib qolgan yozuvlar) sanalmaydi — aks holda
+ * raqam 56 ming bo'lib chiqib, hech qanday ma'no bermasdi.
+ *
+ * Shu sababli ko'rsatilgan son yuborilganidan biroz katta bo'lishi
+ * mumkin — farqi hisobotdagi "Bloklagan" ustunida ko'rinadi.
+ */
+const audienceCountFilter = () => ({
     unreachable: { $ne: true },
     telegram_id: { $nin: EXCLUDED_USER_IDS },
 });
@@ -56,7 +75,7 @@ export const BroadcastService = {
             if (!tenant.active) continue;
             let users = 0;
             try {
-                users = await tenant.models.User.countDocuments(audienceFilter());
+                users = await tenant.models.User.countDocuments(audienceCountFilter());
             } catch { /* baza javob bermasa 0 ko'rsatamiz */ }
             out.push({ botId: tenant.botId, username: tenant.username, users });
         }
