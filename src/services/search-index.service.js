@@ -33,12 +33,25 @@ const STORAGE_DIR = path.resolve(__dirname, "../storage");
  * u bazadagi son bilan mos kelmasa e'tiborsiz qoldirilib qayta quriladi.
  */
 
-/** "O‘rgimchak odam" -> "orgimchak odam" */
+/**
+ * Qidiruv uchun matnni bir xil ko'rinishga keltiradi.
+ *
+ * "O‘rgimchak odam" -> "orgimchak odam"
+ * "Ruxshunos"       -> "ruhshunos"   (x va h birlashtiriladi)
+ *
+ * NEGA x -> h: o'zbekchada bu ikki harf doim chalkashadi — bir xil so'z
+ * "ruhshunos/ruxshunos", "muhabbat/muxabbat", "hayot/xayot" ko'rinishida
+ * yoziladi. Indeks ham, so'rov ham bir xil qoidadan o'tgani uchun ikkala
+ * yozuv ham topiladi. Inglizcha nomlarga zarari yo'q: "matrix" ikkala
+ * tomonda ham "matrih" bo'ladi va baribir mos keladi.
+ */
 export const normalize = (text) =>
     String(text || "")
         .toLowerCase()
-        // Barcha apostrof ko'rinishlari olib tashlanadi: ' ' ‘ ’ ` ʻ ʼ ´
+        // Barcha apostrof ko'rinishlari olib tashlanadi
         .replace(/['’‘`ʻʼ´]/g, "")
+        // O'zbekcha imlodagi eng keng tarqalgan chalkashlik
+        .replace(/x/g, "h")
         // Harf va raqamdan boshqasi bo'sh joyga aylanadi
         .replace(/[^\p{L}\p{N}]+/gu, " ")
         .trim()
