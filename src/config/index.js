@@ -44,9 +44,24 @@ const parseBots = () => {
 
         const channelId = process.env[`CHANNEL_ID${i}`] || (i === 1 ? process.env.CHANNEL_ID : null);
 
+        /**
+         * ARALASH BOT: o'z film bazasi YO'Q, kontentni boshqa botlarniki
+         * ustidan o'qiydi. Qiymat — slot raqamlari: BOT7_CONTENT_FROM=1,2
+         * "1-bot va 2-botning filmlari birlashtirilsin" degani.
+         *
+         * Bunday bot kontentga FAQAT O'QISH uchun tegadi; foydalanuvchilari
+         * esa har doimgidek o'zinikida (dataUri + dataDb majburiy).
+         */
+        const contentFrom = parseList(process.env[`BOT${i}_CONTENT_FROM`])
+            .map(Number)
+            .filter((n) => Number.isInteger(n) && n >= 1 && n <= MAX_BOTS);
+
         if (!token && !contentUri && !dataUri) continue;   // bu o'rin ishlatilmayapti
 
-        if (!token || !contentUri || !dataUri) {
+        // Aralash botda contentUri kutilmaydi — uning o'rnini contentFrom bosadi
+        const needsOwnContent = contentFrom.length === 0;
+
+        if (!token || !dataUri || (needsOwnContent && !contentUri)) {
             console.warn(
                 `[Config] ${i}-bot chala sozlangan (token/contentUri/dataUri dan biri yo'q) — o'tkazib yuborildi.`
             );
@@ -61,7 +76,7 @@ const parseBots = () => {
 
         // Atlas URI sida to'ldirilmagan namuna qolib ketgan bo'lsa
         // (masalan "<db_username>") ulanish baribir yiqiladi — oldindan aytamiz.
-        for (const uri of [contentUri, dataUri]) {
+        for (const uri of [contentUri, dataUri].filter(Boolean)) {
             const hole = String(uri).match(/<[^>]+>/);
             if (hole) {
                 console.warn(
@@ -71,9 +86,12 @@ const parseBots = () => {
         }
 
         bots.push({
+            // Slot raqami — contentFrom shu raqamlarga murojaat qiladi
+            slot: i,
             botId,
             token,
-            contentUri,
+            contentUri: needsOwnContent ? contentUri : null,
+            contentFrom,
             dataUri,
             // Bitta clusterda bir nechta baza bo'lishi mumkin — shuning uchun
             // guruhlash URI + baza nomi bo'yicha aniqlanadi.

@@ -2,7 +2,9 @@ import fs from 'fs/promises';
 import { InputFile } from 'grammy';
 import { CONFIG } from "../config/index.js";
 import { EpisodeModel } from "../models/episode.model.js";
+import { CodeService } from "./code.service.js";
 import { FilmModel } from "../models/film.model.js";
+import { mergedStores, mergedEpisodeByCode } from "../core/content-merge.js";
 import { InstagramService } from "./instagram.service.js";
 import { normalizeMediaId } from "../utils/media.utils.js";
 import { getBotApi } from "../utils/telegram.js";
@@ -25,7 +27,8 @@ export const EpisodeService = {
             throw error;
         }
 
-        const excistEpisode = await EpisodeModel.findOne({ code }).select("_id").lean();
+        // Kod butun kod maydonida yagona (film kodlari bilan bir mantiq)
+        const excistEpisode = await CodeService.isEpisodeCodeTaken(code);
         if (excistEpisode) {
             if (videoLocalPath) await fs.unlink(videoLocalPath).catch(() => { });
             const error = new Error("Bunday code mavjud, mavjud bo'lmagan code kiriting!");
@@ -157,7 +160,7 @@ export const EpisodeService = {
 
         // Check if code is being updated and conflicts
         if (body.code && Number(body.code) !== episode.code) {
-            const exists = await EpisodeModel.findOne({ code: Number(body.code) }).select("_id").lean();
+            const exists = await CodeService.isEpisodeCodeTaken(body.code);
             if (exists) {
                 const error = new Error("Bunday code mavjud, boshqa code kiriting!");
                 error.status = 409;
@@ -260,6 +263,10 @@ export const EpisodeService = {
     },
 
     async searchByCode(code) {
+        // Aralash bot: qism manba bazalarning birida yotibdi
+        const stores = mergedStores();
+        if (stores) return await mergedEpisodeByCode(stores, code);
+
         return await EpisodeModel.findOne({ code }).lean();
     }
 };

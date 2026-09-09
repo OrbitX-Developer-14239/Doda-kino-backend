@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
-import { tenantProp } from "../core/tenant-context.js";
+import { currentTenant, requireTenant } from "../core/tenant-context.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STORAGE_DIR = path.resolve(__dirname, "../storage");
@@ -97,11 +97,13 @@ const wordMatches = (a, b) =>
 export class FilmSearchIndex {
     /**
      * @param {number} botId - Telegram bot ID (snapshot fayl nomi uchun)
-     * @param {import("mongoose").Model} filmModel - shu botning Film modeli
+     * @param {import("mongoose").Model[]} filmModels - shu bot o'qiydigan Film modellari.
+     *   Oddiy botda bitta. ARALASH botda bir nechta: indeks ularning
+     *   hammasidan quriladi va qidiruv bitta ro'yxat ustidan boradi.
      */
-    constructor(botId, filmModel) {
+    constructor(botId, filmModels) {
         this.botId = botId;
-        this.FilmModel = filmModel;
+        this.FilmModels = Array.isArray(filmModels) ? filmModels : [filmModels];
         this.snapshotPath = path.join(STORAGE_DIR, `search-index-${botId}.json`);
         this.entries = [];
         this.ready = false;
@@ -112,9 +114,10 @@ export class FilmSearchIndex {
 
     /** Bazadan to'liq qayta quradi */
     async rebuild() {
-        const films = await this.FilmModel.find()
-            .select("code name originalName year")
-            .lean();
+        const perModel = await Promise.all(
+            this.FilmModels.map((M) => M.find().select("code name originalName year").lean())
+        );
+        const films = perModel.flat();
 
         this.entries = films.map(toEntry);
         this.ready = true;
@@ -129,10 +132,11 @@ export class FilmSearchIndex {
      */
     async init() {
         try {
-            const [raw, dbCount] = await Promise.all([
+            const [raw, counts] = await Promise.all([
                 fs.readFile(this.snapshotPath, "utf8"),
-                this.FilmModel.estimatedDocumentCount(),
+                Promise.all(this.FilmModels.map((M) => M.estimatedDocumentCount())),
             ]);
+            const dbCount = counts.reduce((a, b) => a + b, 0);
             const snap = JSON.parse(raw);
 
             if (Array.isArray(snap.films) && snap.films.length === dbCount) {
@@ -333,7 +337,37 @@ export class FilmSearchIndex {
 }
 
 /**
- * Joriy so'rovning botiga tegishli indeksga proxy.
- * Servislar ilgarigidek `SearchIndex.search(...)` deb chaqiraveradi.
+ * Indeksni yangilash KIMGA tarqalishini aniqlaydigan funksiya.
+ *
+ * tenant-registry ishga tushganda o'zining contentSiblings() ini shu
+ * yerga qo'yadi. Shunday qilingani sabab — registr allaqachon shu
+ * faylni import qiladi; teskari import halqa hosil qilardi.
  */
-export const SearchIndex = tenantProp("searchIndex");
+let siblingsResolver = (tenant) => [tenant];
+export const setIndexSiblingsResolver = (fn) => { siblingsResolver = fn; };
+
+/**
+ * Servislar uchun yagona kirish nuqtasi.
+ *
+ * O'QISH joriy botning indeksidan boradi.
+ *
+ * YOZISH esa o'sha filmni ko'rsatayotgan BARCHA botning indeksiga
+ * tarqaladi. Ilgari faqat joriy botniki yangilanardi: admin "Doda
+ * Kino" da filmni tahrirlasa, aynan shu filmni ko'rsatadigan "Mega
+ * Filmlar" ning xotiradagi indeksi qayta ishga tushirilgunicha
+ * eskirgan nom bilan qolib ketardi. Aralash botda bu yanada muhim:
+ * uning butun katalogi boshqa botlarning bazasidan iborat.
+ */
+export const SearchIndex = {
+    search: (...args) => requireTenant("searchIndex.search").searchIndex.search(...args),
+    searchMany: (...args) => requireTenant("searchIndex.searchMany").searchIndex.searchMany(...args),
+    searchLoose: (...args) => requireTenant("searchIndex.searchLoose").searchIndex.searchLoose(...args),
+
+    upsert(film) {
+        for (const t of siblingsResolver(currentTenant())) t.searchIndex?.upsert(film);
+    },
+
+    remove(code) {
+        for (const t of siblingsResolver(currentTenant())) t.searchIndex?.remove(code);
+    },
+};

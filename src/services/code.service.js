@@ -1,5 +1,5 @@
-import { FilmModel } from "../models/film.model.js";
-import { EpisodeModel } from "../models/episode.model.js";
+import { requireTenant } from "../core/tenant-context.js";
+import { codeSpaceStores } from "../core/tenant-registry.js";
 
 // Validatsiyadagi chegaralar bilan bir xil bo'lishi shart
 export const FILM_CODE_MIN = 50000;
@@ -32,20 +32,40 @@ const pickFreeCodes = (takenSet, min, step, count) => {
     return picked;
 };
 
+/**
+ * Band kodlar — joriy bot bilan BITTA kod maydonidagi hamma bazadan.
+ *
+ * NEGA FAQAT O'Z BAZASI YETMAYDI: aralash bot (masalan "Doda Media")
+ * kino va multfilm bazalarini birlashtirib ko'rsatadi. Har baza o'zicha
+ * kod tanlasa, ikkalasida ham 51200 paydo bo'lishi mumkin — aralash
+ * botda esa foydalanuvchi 51200 yozganda qaysi biri kerakligini
+ * aniqlab bo'lmaydi. Shuning uchun kod butun maydon bo'ylab yagona.
+ */
+const takenCodes = async (field) => {
+    const stores = codeSpaceStores(requireTenant("kod tanlash"));
+    const lists = await Promise.all(
+        stores.map((s) => s[field].find().select("code").lean())
+    );
+    return new Set(lists.flat().map((d) => d.code));
+};
+
 export const CodeService = {
     /** Bo'sh film kodi (>= 50000) */
     async nextFilmCodes(count = 1) {
-        const taken = new Set(
-            (await FilmModel.find().select("code").lean()).map((f) => f.code)
-        );
-        return pickFreeCodes(taken, FILM_CODE_MIN, FILM_STEP, count);
+        return pickFreeCodes(await takenCodes("Film"), FILM_CODE_MIN, FILM_STEP, count);
     },
 
     /** Bo'sh epizod kodlari (>= 100) */
     async nextEpisodeCodes(count = 1) {
-        const taken = new Set(
-            (await EpisodeModel.find().select("code").lean()).map((e) => e.code)
-        );
-        return pickFreeCodes(taken, EPISODE_CODE_MIN, EPISODE_STEP, count);
+        return pickFreeCodes(await takenCodes("Episode"), EPISODE_CODE_MIN, EPISODE_STEP, count);
+    },
+
+    /** Kod maydonida shu kod allaqachon bandmi */
+    async isFilmCodeTaken(code) {
+        return (await takenCodes("Film")).has(Number(code));
+    },
+
+    async isEpisodeCodeTaken(code) {
+        return (await takenCodes("Episode")).has(Number(code));
     },
 };

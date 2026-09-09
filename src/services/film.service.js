@@ -3,12 +3,17 @@ import { InputFile } from "grammy";
 import { CONFIG } from "../config/index.js";
 import { requireTenant } from "../core/tenant-context.js";
 import { FilmModel } from "../models/film.model.js";
+import { CodeService } from "./code.service.js";
 import { EpisodeModel } from "../models/episode.model.js";
 import { normalizeMediaId } from "../utils/media.utils.js";
 import { getBotApi } from "../utils/telegram.js";
 import { duplicateKeyError } from "../utils/errors.js";
 import { cache } from "./cache.service.js";
 import { SearchIndex } from "./search-index.service.js";
+import {
+    mergedStores, mergedFilmById, mergedFilmByCode,
+    mergedFilmsPaginated, mergedFilmsByPatterns,
+} from "../core/content-merge.js";
 
 /**
  * Posterni Telegram kanaliga yuklab, bazaga saqlanadigan { channelId, msgId } ni qaytaradi.
@@ -41,13 +46,20 @@ async function uploadPosterToTelegram(posterLocalPath) {
     }
 }
 
+// Ro'yxat uchun maydonlar. episodesCount ham kerak: admin paneldagi
+// "Qismlar" ustuni shundan o'qiydi.
+const LIST_SELECT = "name originalName year code views posterId episodesCount seasonsCount";
+
 export const FilmService = {
     async createFilm(body, posterLocalPath) {
         // Vaqtinchalik fayl qaysi yo'l bilan chiqmaylik o'chiriladi (orfan fayl qolmasin).
         try {
             const { code } = body;
 
-            const excistFilm = await FilmModel.findOne({ code }).select("_id").lean();
+            // Kod BUTUN kod maydonida yagona bo'lishi kerak — aralash bot
+            // bir nechta bazani birlashtirib ko'rsatadi va takrorlangan
+            // kodda qaysi film kerakligini aniqlab bo'lmaydi.
+            const excistFilm = await CodeService.isFilmCodeTaken(code);
             if (excistFilm) {
                 const error = new Error("Bunday code mavjud, mavjud bo'lmagan code kiriting!");
                 error.status = 409;
@@ -102,7 +114,7 @@ export const FilmService = {
 
             // If code is being changed, check if it's already used
             if (body.code && Number(body.code) !== film.code) {
-                const exists = await FilmModel.findOne({ code: Number(body.code) }).select("_id").lean();
+                const exists = await CodeService.isFilmCodeTaken(body.code);
                 if (exists) {
                     const error = new Error("Bunday code mavjud, boshqa code kiriting!");
                     error.status = 409;
@@ -156,6 +168,10 @@ export const FilmService = {
     },
 
     async getFilmById(id) {
+        // Aralash bot: film manba bazalarning birida yotibdi
+        const stores = mergedStores();
+        if (stores) return await mergedFilmById(stores, id);
+
         return await FilmModel.findById(id).lean();
     },
 
@@ -164,12 +180,16 @@ export const FilmService = {
         const safePage = Math.max(1, Number(page) || 1);
         const skip = (safePage - 1) * limit;
 
+        // Aralash bot: ro'yxat bir nechta bazadan yig'iladi
+        const stores = mergedStores();
+        if (stores) return await mergedFilmsPaginated(stores, safePage, limit, LIST_SELECT);
+
         const [totalFilms, films] = await Promise.all([
             FilmModel.estimatedDocumentCount(),
             FilmModel.find()
                 // episodesCount ham kerak: admin paneldagi "Qismlar" ustuni shundan
                 // o'qiydi. U tanlanmagani uchun ro'yxatda hamma film "0 ta" ko'rinardi.
-                .select("name originalName year code views posterId episodesCount seasonsCount")
+                .select(LIST_SELECT)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -189,6 +209,9 @@ export const FilmService = {
     },
 
     async searchByCode(code) {
+        const stores = mergedStores();
+        if (stores) return await mergedFilmByCode(stores, code);
+
         return await FilmModel.findOne({ code }).lean();
     },
 
@@ -208,6 +231,9 @@ export const FilmService = {
             .map((n) => new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
 
         if (!patterns.length) return [];
+
+        const stores = mergedStores();
+        if (stores) return await mergedFilmsByPatterns(stores, patterns, limit);
 
         return await FilmModel.find({
             $or: [
