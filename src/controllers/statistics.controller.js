@@ -1,4 +1,5 @@
 import { StatisticsService } from "../services/statistics.service.js";
+import { UserGrowthService, ALLOWED_RANGES } from "../services/user-growth.service.js";
 import { logger } from "../utils/logger.js";
 
 export const StatisticsController = {
@@ -50,6 +51,28 @@ export const StatisticsController = {
             });
         } catch (error) {
             logger.error(`[StatisticsController.getTop] Error: ${error.message}`);
+            next(error);
+        }
+    },
+
+    /**
+     * Foydalanuvchilar o'sishi grafigi uchun kunlik nuqtalar.
+     * ?range=7|30|90|all (sukut 30)
+     */
+    async getUsersGrowth(req, res, next) {
+        try {
+            const range = String(req.query.range || "30");
+            if (!ALLOWED_RANGES.includes(range)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `range faqat quyidagilardan biri bo'lishi mumkin: ${ALLOWED_RANGES.join(", ")}`,
+                });
+            }
+
+            const data = await UserGrowthService.getGrowth(range);
+            return res.status(200).json({ success: true, data });
+        } catch (error) {
+            logger.error(`[StatisticsController.getUsersGrowth] Error: ${error.message}`);
             next(error);
         }
     }

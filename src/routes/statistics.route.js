@@ -62,4 +62,34 @@ router.get("/", authMiddleware(["superadmin", "admin"]), StatisticsController.ge
  */
 router.get("/top", authMiddleware(["superadmin", "admin"]), StatisticsController.getTop);
 
+/**
+ * @swagger
+ * /api/statistics/users-growth:
+ *   get:
+ *     summary: Foydalanuvchilar o'sishi (grafik uchun kunlik nuqtalar)
+ *     description: >
+ *       Faqat botga o'zi yozgan foydalanuvchilar sanaladi (started=true).
+ *       Kanal orqali paydo bo'lgan yozuvlar grafikni buzmasligi uchun faqat
+ *       totals.records da raqam sifatida qaytadi. Yangi foydalanuvchi
+ *       bo'lmagan kunlar ham nol bilan to'ldiriladi. Kunlar Toshkent vaqtida.
+ *     tags: [Statistics]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: range
+ *         schema:
+ *           type: string
+ *           enum: ["7", "30", "90", "all"]
+ *           default: "30"
+ *     responses:
+ *       200:
+ *         description: >
+ *           data.points: [{ date, newStarted, newActive, totalStarted, totalActive }],
+ *           data.totals: { records, started, active, blocked }
+ *       400:
+ *         description: Noto'g'ri range
+ */
+router.get("/users-growth", authMiddleware(["superadmin", "admin"]), StatisticsController.getUsersGrowth);
+
 export default router;
