@@ -92,4 +92,55 @@ router.get("/top", authMiddleware(["superadmin", "admin"]), StatisticsController
  */
 router.get("/users-growth", authMiddleware(["superadmin", "admin"]), StatisticsController.getUsersGrowth);
 
+/**
+ * @swagger
+ * /api/statistics/films:
+ *   get:
+ *     summary: Tanlagich uchun filmlar ro'yxati (kod, nom, jami ko'rish)
+ *     tags: [Statistics]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "data: [{ code, name, views, episodesCount }]" }
+ */
+router.get("/films", authMiddleware(["superadmin", "admin"]), StatisticsController.getFilmsForPicker);
+
+/**
+ * @swagger
+ * /api/statistics/film-views:
+ *   get:
+ *     summary: Bitta filmning ko'rilish statistikasi
+ *     description: >
+ *       Kunlik ko'rishlar (grafik uchun, bo'sh kunlar nol bilan to'ldirilgan)
+ *       va qismlar bo'yicha taqsimot. DIQQAT: kunlik hisob shu xizmat
+ *       qo'shilgandan keyin yig'ila boshlagan — undan oldingi ko'rishlar
+ *       faqat jami hisoblagichda (totals.allTime) turadi.
+ *     tags: [Statistics]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: code, required: true, schema: { type: integer } }
+ *       - { in: query, name: range, schema: { type: string, enum: ["7","30","90","all"], default: "30" } }
+ *     responses:
+ *       200: { description: "data: { film, range, trackingSince, totals, points, byEpisode }" }
+ *       404: { description: "Film topilmadi" }
+ */
+router.get("/film-views", authMiddleware(["superadmin", "admin"]), StatisticsController.getFilmViews);
+
+/**
+ * @swagger
+ * /api/statistics/channel-joins:
+ *   get:
+ *     summary: Majburiy kanallarga bot orqali qo'shilish va chiqish
+ *     description: >
+ *       Har kun uchun qo'shilgan va chiqib ketganlar soni — kanal bo'yicha
+ *       va umumiy. Faqat botning haqiqiy foydalanuvchilari hisobga olinadi.
+ *       Tarix hodisalarni yozish boshlangan kundan beri (trackingSince).
+ *     tags: [Statistics]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: range, schema: { type: string, enum: ["7","30","90","all"], default: "30" } }
+ *     responses:
+ *       200: { description: "data: { range, trackingSince, channels, totals, points }" }
+ */
+router.get("/channel-joins", authMiddleware(["superadmin", "admin"]), StatisticsController.getChannelJoins);
+
 export default router;

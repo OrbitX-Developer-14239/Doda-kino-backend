@@ -1,6 +1,9 @@
 import { FilmModel } from "../models/film.model.js";
 import { EpisodeModel } from "../models/episode.model.js";
 import { mergedStores, mergedIncViews, mergedFilmsWithEpisodes } from "../core/content-merge.js";
+import { ViewStatModel } from "../models/view-stat.model.js";
+import { todayKey } from "../utils/day.js";
+import { logger } from "../utils/logger.js";
 
 /** Bazadan kelgan filmni panel kutgan ko'rinishga o'giradi */
 const formatFilm = (f) => ({
@@ -23,6 +26,19 @@ export const StatisticsService = {
             error.status = 400;
             throw error;
         }
+
+        /**
+         * Kunlik hisob — grafik uchun. Jami hisoblagichdan (film.views)
+         * "qaysi kuni" degan savolga javob chiqmaydi.
+         *
+         * Xatosi ko'rishning o'zini yiqitmaydi: statistika yozilmay qolsa
+         * ham foydalanuvchi filmni ko'raverishi kerak.
+         */
+        ViewStatModel.updateOne(
+            { day: todayKey(), kind: type, code: Number(code) },
+            { $inc: { count: 1 } },
+            { upsert: true }
+        ).catch((e) => logger.warn(`[Statistika] kunlik ko'rish yozilmadi: ${e.message}`));
 
         // Aralash bot: kod qaysi manba bazasida bo'lsa, o'sha yerda oshadi
         const stores = mergedStores();

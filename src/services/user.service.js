@@ -1,5 +1,7 @@
 import { UserModel } from "../models/user.model.js";
 import { ChannelService } from "./channel.service.js";
+import { ChannelEventModel } from "../models/channel-event.model.js";
+import { logger } from "../utils/logger.js";
 
 // Faqat shu maydonlarni yozishga ruxsat (mass assignment ga qarshi)
 const WRITABLE_FIELDS = ["first_name", "username", "channels_condition", "started"];
@@ -87,6 +89,43 @@ export const UserService = {
 
         if (body.channels_condition) {
             body.channels_condition = Array.from(mergedMap.values());
+        }
+
+        /**
+         * A'zolik O'ZGARGAN bo'lsa — hodisa yozuvi.
+         *
+         * `channels_condition` faqat hozirgi holatni saqlaydi, shuning
+         * uchun "qachon qo'shildi, qachon chiqdi" degan savolga javob
+         * yo'q edi. Bu yer yagona o'tish nuqtasi: obuna tekshiruvi ham,
+         * kanaldagi chat_member hodisasi ham shu metodga keladi.
+         *
+         * Faqat BIZNING foydalanuvchimiz (started) hisobga olinadi —
+         * botni ochmagan, kanalga chetdan kelgan odam bu yerga tushmaydi.
+         */
+        if (body.channels_condition && existingUser) {
+            const wasMember = new Map(
+                (existingUser.channels_condition || []).map((c) => [c.telegram_id, c.is_member === true])
+            );
+
+            const events = [];
+            for (const c of body.channels_condition) {
+                const before = wasMember.get(c.telegram_id);
+                // Yangi kanal (before === undefined) hali hodisa emas:
+                // bu shunchaki ro'yxatga qo'shilgani, odam harakat qilmagan
+                if (before === undefined || before === (c.is_member === true)) continue;
+                events.push({
+                    telegram_id: String(body.telegram_id),
+                    channel_id: c.telegram_id,
+                    channel_name: c.name,
+                    action: c.is_member ? "join" : "leave",
+                });
+            }
+
+            if (events.length) {
+                ChannelEventModel.insertMany(events).catch((e) =>
+                    logger.warn(`[Kanal] hodisa yozilmadi: ${e.message}`)
+                );
+            }
         }
 
         // YARATISH faqat odam botga O'ZI yozganda (started: true).

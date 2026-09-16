@@ -47,6 +47,14 @@ export const mergedEpisodeByCode = async (stores, code) => {
     return found[0] || null;
 };
 
+/** Kodlar ro’yxati bo’yicha qismlar — bitta filmning taqsimoti uchun */
+export const mergedEpisodesByCodes = async (stores, codes) =>
+    fromAll(stores, (s) =>
+        s.Episode.find({ code: { $in: codes } })
+            .select("code views episodeNumber season name")
+            .lean()
+    );
+
 /** _id bo'yicha film. ObjectId bazalararo takrorlanmaydi. */
 export const mergedFilmById = async (stores, id) => {
     const found = await fromAll(stores, (s) => s.Film.findById(id).lean().catch(() => null));

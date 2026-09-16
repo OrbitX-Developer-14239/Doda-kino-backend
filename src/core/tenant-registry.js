@@ -9,6 +9,8 @@ import { EpisodeSchema } from "../models/episode.model.js";
 import { channelSchema } from "../models/channels.model.js";
 import { userSchema } from "../models/user.model.js";
 import { discoveredChatSchema } from "../models/discovered-chat.model.js";
+import { viewStatSchema } from "../models/view-stat.model.js";
+import { channelEventSchema } from "../models/channel-event.model.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -114,6 +116,9 @@ const buildSimpleTenant = (botCfg) => {
         Channel: dataConn.model("Channel", channelSchema),
         User: dataConn.model("User", userSchema),
         DiscoveredChat: dataConn.model("DiscoveredChat", discoveredChatSchema),
+        // Statistika: kunlik ko'rishlar va kanal hodisalari — har botda o'zinikí
+        ViewStat: dataConn.model("ViewStat", viewStatSchema),
+        ChannelEvent: dataConn.model("ChannelEvent", channelEventSchema),
     };
 
     return {
@@ -153,6 +158,9 @@ const buildCompositeTenant = (botCfg, sourceTenants) => {
         Channel: dataConn.model("Channel", channelSchema),
         User: dataConn.model("User", userSchema),
         DiscoveredChat: dataConn.model("DiscoveredChat", discoveredChatSchema),
+        // Statistika: kunlik ko'rishlar va kanal hodisalari — har botda o'zinikí
+        ViewStat: dataConn.model("ViewStat", viewStatSchema),
+        ChannelEvent: dataConn.model("ChannelEvent", channelEventSchema),
     };
 
     return {
