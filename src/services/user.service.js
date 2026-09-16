@@ -21,6 +21,23 @@ const buildUpdateDoc = (body) => {
  */
 const byTelegramId = (value) => ({ telegram_id: String(value) });
 
+/**
+ * Odam botga O'ZI yozdi — demak chat ochiq va bot unga yoza oladi.
+ *
+ * NEGA BELGILAR TOZALANADI: `blocked` reklama tarqatishda 403 kelganda,
+ * `unreachable` esa 400 "chat not found" kelganda qo'yiladi va ikkalasi
+ * ham reklamadan CHIQARIB TASHLAYDI. Odam keyin botni blokdan chiqarib
+ * qayta yozsa yoki eski "kanal orqali kelgan" yozuv egasi birinchi marta
+ * botga yozsa, belgi eskiligicha qolib ketardi — natijada haqiqiy,
+ * xabar olishga tayyor odam reklama ro'yxatidan tushib qolardi.
+ * Bazada hozir 24 ta bloklagan va 56 mingdan ortiq "yetib bo'lmaydi"
+ * belgili yozuv bor, ya'ni bu jim yo'qotish katta bo'lishi mumkin edi.
+ */
+const PROOF_OF_LIFE = { started: true, blocked: false, unreachable: false };
+
+/** buildUpdateDoc natijasiga qo'shimcha maydonlarni qo'shadi */
+const withSet = (doc, extra) => ({ ...doc, $set: { ...(doc.$set || {}), ...extra } });
+
 export const UserService = {
     async createUser(body) {
         // Bu metod faqat /start dan chaqiriladi — demak odam botga O'ZI yozgan
@@ -28,7 +45,10 @@ export const UserService = {
 
         const data = await UserModel.findOneAndUpdate(
             byTelegramId(body.telegram_id),
-            { ...buildUpdateDoc(body), $setOnInsert: byTelegramId(body.telegram_id) },
+            {
+                ...withSet(buildUpdateDoc(body), PROOF_OF_LIFE),
+                $setOnInsert: byTelegramId(body.telegram_id),
+            },
             { returnDocument: "after", upsert: true, runValidators: true }
         ).lean()
         return data
@@ -144,7 +164,12 @@ export const UserService = {
         const data = await UserModel.findOneAndUpdate(
             byTelegramId(body.telegram_id),
             isRealUser
-                ? { ...buildUpdateDoc(body), $setOnInsert: byTelegramId(body.telegram_id) }
+                ? {
+                    ...withSet(buildUpdateDoc(body), PROOF_OF_LIFE),
+                    $setOnInsert: byTelegramId(body.telegram_id),
+                }
+                // Kanal hodisasi: yozuv yaratilmaydi va "yetib bo'lmaydi"
+                // belgilari ham o'chirilmaydi — bu odam botga yozmadi
                 : buildUpdateDoc(body),
             { returnDocument: "after", upsert: isRealUser, runValidators: true }
         ).lean()

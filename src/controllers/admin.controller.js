@@ -2,6 +2,12 @@ import { AdminService } from "../services/admin.service.js";
 import { catchAsync } from "../utils/catchAsync.js";
 import { CONFIG } from "../config/index.js";
 
+/** HttpOnly cookie dagi refresh token */
+const readRefreshCookie = (req) => {
+    const match = (req.headers.cookie || "").match(/refreshToken=([^;]+)/);
+    return match ? match[1] : null;
+};
+
 export const AdminController = {
     login: catchAsync(async (req, res) => {
         const data = await AdminService.login(req.body);
@@ -123,17 +129,18 @@ export const AdminController = {
     }),
 
     refresh: catchAsync(async (req, res) => {
-        const cookieHeader = req.headers.cookie || "";
-        const match = cookieHeader.match(/refreshToken=([^;]+)/);
-        const refreshToken = match ? match[1] : null;
+        const refreshToken = readRefreshCookie(req);
 
         const data = await AdminService.refresh(refreshToken);
         res.status(200).json({ success: true, data });
     }),
 
     logout: catchAsync(async (req, res) => {
+        // Faqat SHU brauzerning sessiyasi yopiladi — boshqa qurilmadagi
+        // ochiq panel ishlashda davom etsin
+        const refreshToken = readRefreshCookie(req);
         res.clearCookie('refreshToken', { path: '/api/admin' });
-        const data = await AdminService.logout(req.admin._id);
+        const data = await AdminService.logout(req.admin._id, refreshToken);
         res.status(200).json({ success: true, data }); 
     }),
 

@@ -39,6 +39,34 @@ const issueTokens = (admin) => ({
     })
 });
 
+/**
+ * Bir vaqtda ochiq tura oladigan sessiyalar soni.
+ * Cheklov bo'lmasa har login hujjatga bitta yozuv qo'shib boraverardi.
+ */
+const MAX_SESSIONS = 10;
+
+/** Yangi sessiyani ro'yxatga qo'shadi va eskilarini tozalaydi */
+const rememberSession = (admin, refreshToken) => {
+    const { exp } = jwt.decode(refreshToken) || {};
+    const now = Date.now();
+
+    const alive = (admin.refreshTokens || []).filter(
+        (s) => s.expiresAt && s.expiresAt.getTime() > now
+    );
+
+    alive.push({
+        token: refreshToken,
+        createdAt: new Date(now),
+        expiresAt: exp ? new Date(exp * 1000) : new Date(now + 15 * 24 * 3600 * 1000),
+    });
+
+    // Eng yangilari qoladi
+    admin.refreshTokens = alive.slice(-MAX_SESSIONS);
+
+    // Eski maydon endi ishlatilmaydi — yangi login uni bo'shatadi
+    admin.refreshToken = null;
+};
+
 const normalizeTelegramId = (value) => {
     if (value === null || value === undefined || value === "") return null;
     const num = Number(value);
@@ -118,7 +146,7 @@ export const AdminService = {
         }
 
         const { accessToken, refreshToken } = issueTokens(admin);
-        admin.refreshToken = refreshToken;
+        rememberSession(admin, refreshToken);
         await admin.save();
 
         return { accessToken, refreshToken, user: { id: admin._id, username: admin.username, role: admin.role } };
@@ -401,7 +429,7 @@ export const AdminService = {
 
         const { accessToken, refreshToken } = issueTokens(admin);
 
-        admin.refreshToken = refreshToken;
+        rememberSession(admin, refreshToken);
         await admin.save();
 
         // Settings sahifasidagi Telegram ulash socketini xabar berish
@@ -451,7 +479,7 @@ export const AdminService = {
         admin.telegramLoginTokenHash = hashToken(loginToken);
         admin.telegramLoginExpiresAt = expiresAt;
 
-        admin.refreshToken = refreshToken;
+        rememberSession(admin, refreshToken);
         await admin.save();
 
         return {
@@ -469,9 +497,16 @@ export const AdminService = {
             const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
             const admin = await AdminModel.findById(decoded.id);
 
-            if (!admin || admin.refreshToken !== token) {
-                throw new Error();
-            }
+            if (!admin) throw new Error();
+
+            // Ro'yxatdagi sessiyalardan biri; eski bitta maydon ham
+            // hali qabul qilinadi (o'zgarish chiqqanda ochiq turgan
+            // sessiyalar uzilib qolmasligi uchun)
+            const known =
+                (admin.refreshTokens || []).some((s) => s.token === token) ||
+                admin.refreshToken === token;
+
+            if (!known) throw new Error();
 
             const { accessToken: newAccessToken } = issueTokens(admin);
             return { accessToken: newAccessToken };
@@ -480,13 +515,27 @@ export const AdminService = {
         }
     },
 
-    async logout(id) {
+    /**
+     * Chiqish.
+     *
+     * Token berilsa FAQAT o'sha sessiya o'chadi — boshqa qurilmadagi
+     * ochiq panel ishlashda davom etadi. Token berilmasa (eski
+     * mijozlar) hammasi o'chadi.
+     */
+    async logout(id, token = null) {
         const admin = await AdminModel.findById(id);
-        if (admin) {
+        if (!admin) return { message: "Tizimdan chiqildi" };
+
+        if (token) {
+            admin.refreshTokens = (admin.refreshTokens || []).filter((s) => s.token !== token);
+            if (admin.refreshToken === token) admin.refreshToken = null;
+        } else {
+            admin.refreshTokens = [];
             admin.refreshToken = null;
-            await admin.save();
         }
-        return { message: "Tizimdan to'liq chiqildi" };
+
+        await admin.save();
+        return { message: token ? "Tizimdan chiqildi" : "Barcha qurilmalardan chiqildi" };
     },
 
     async updateAdmin(targetId, myUser, body = {}) {
