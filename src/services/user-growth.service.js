@@ -16,8 +16,8 @@ import { UserModel } from "../models/user.model.js";
  * Shuning uchun grafik bir xil masshtabdagi ikki chiziqni beradi:
  *   started — botga o'zi yozgan (haqiqiy foydalanuvchi)
  *   active  — ulardan HOZIR ham botni bloklamaganlari
- * "Barcha yozuvlar" soni esa grafikda emas, `totals` da raqam sifatida
- * qaytadi — u yashirilmaydi, lekin chiziqlarni ham buzmaydi.
+ * "Barcha yozuvlar" soni umuman qaytarilmaydi: admin panel faqat botning
+ * haqiqiy foydalanuvchilarini ko'rsatadi.
  *
  * `active` haqida: blok qachon qilingani saqlanmaydi, faqat hozirgi
  * holati bor. Demak "12-sentyabrgacha kelganlardan hozir nechtasi faol"
@@ -73,7 +73,7 @@ export const UserGrowthService = {
         const from = dayStartUtc(fromKey);
         const startedInRange = { started: true, createdAt: { $gte: from } };
 
-        const [perDay, baseStarted, baseActive, records, started, active] = await Promise.all([
+        const [perDay, baseStarted, baseActive, started, active] = await Promise.all([
             UserModel.aggregate([
                 { $match: startedInRange },
                 {
@@ -88,7 +88,6 @@ export const UserGrowthService = {
             // darajadan boshlanishi uchun
             UserModel.countDocuments({ started: true, createdAt: { $lt: from } }),
             UserModel.countDocuments({ started: true, ...ACTIVE, createdAt: { $lt: from } }),
-            UserModel.estimatedDocumentCount(),
             UserModel.countDocuments({ started: true }),
             UserModel.countDocuments({ started: true, ...ACTIVE }),
         ]);
@@ -120,8 +119,6 @@ export const UserGrowthService = {
         return {
             range: { key: range, from: fromKey, to: todayKey, days: points.length, timezone: TZ },
             totals: {
-                // Bazadagi barcha yozuvlar, kanal orqali kelganlar ham
-                records,
                 started,
                 active,
                 blocked: started - active,

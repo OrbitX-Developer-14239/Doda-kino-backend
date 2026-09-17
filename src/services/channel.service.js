@@ -172,7 +172,9 @@ export const ChannelService = {
                 }
             })(),
             UserModel.aggregate([
-                { $match: { "channels_condition.telegram_id": channelTid } },
+                // Faqat botga o'zi yozganlar: kanalga chetdan tushib qolgan
+                // eski yozuvlar (1-kanalda 5 mingdan ortiq) sanalmasin
+                { $match: { started: true, "channels_condition.telegram_id": channelTid } },
                 {
                     $project: {
                         entry: {

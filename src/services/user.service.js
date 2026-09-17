@@ -202,8 +202,18 @@ export const UserService = {
     async getUsers(queryParams) {
         const { page = 1, limit = 50, is_subscribed, channel_id } = queryParams;
 
+        /**
+         * FAQAT botga o'zi yozgan foydalanuvchilar.
+         *
+         * Bazada 1-sentyabrgacha majburiy kanal orqali tushib qolgan
+         * 56 mingdan ortiq yozuv bor: ular botni hech qachon ochmagan va
+         * bot ularga yoza olmaydi. Ular bazadan ATAYLAB o'chirilmagan,
+         * lekin admin panelda ko'rinmasligi kerak — aks holda "jami
+         * foydalanuvchilar" soni haqiqatdan 900 barobar katta chiqardi.
+         * Bu yo'l faqat admin uchun (bot bu ro'yxatni so'ramaydi).
+         */
         let filter = {};
-        let andConditions = [];
+        let andConditions = [{ started: true }];
 
         if (channel_id) {
             andConditions.push({
