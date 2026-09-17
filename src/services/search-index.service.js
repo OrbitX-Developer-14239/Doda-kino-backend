@@ -75,6 +75,10 @@ const toEntry = (f) => {
     const nOriginal = normalize(f.originalName);
 
     return {
+        // _id ham kerak: admin panel qidiruv natijasini bosganda filmni
+        // shu bo'yicha ochadi. U bo'lmasa so'rov "film/id/undefined" ketib,
+        // panelda ko'rishlar, qismlar va mamlakat bo'sh ko'rinardi.
+        _id: f._id ? String(f._id) : undefined,
         code: f.code,
         name: f.name,
         originalName: f.originalName,
@@ -115,7 +119,7 @@ export class FilmSearchIndex {
     /** Bazadan to'liq qayta quradi */
     async rebuild() {
         const perModel = await Promise.all(
-            this.FilmModels.map((M) => M.find().select("code name originalName year").lean())
+            this.FilmModels.map((M) => M.find().select("_id code name originalName year").lean())
         );
         const films = perModel.flat();
 
@@ -139,7 +143,9 @@ export class FilmSearchIndex {
             const dbCount = counts.reduce((a, b) => a + b, 0);
             const snap = JSON.parse(raw);
 
-            if (Array.isArray(snap.films) && snap.films.length === dbCount) {
+            // _id siz eski nusxa ishlatilmaydi — bazadan qayta quriladi
+            if (Array.isArray(snap.films) && snap.films.length === dbCount &&
+                snap.films.every((f) => f._id)) {
                 this.entries = snap.films.map(toEntry);
                 this.ready = true;
                 return { source: "nusxa", count: this.entries.length };
@@ -154,7 +160,7 @@ export class FilmSearchIndex {
         const payload = {
             updatedAt: new Date().toISOString(),
             films: this.entries.map((e) => ({
-                code: e.code, name: e.name, originalName: e.originalName,
+                _id: e._id, code: e.code, name: e.name, originalName: e.originalName,
                 year: e.year,
             })),
         };
@@ -262,7 +268,7 @@ export class FilmSearchIndex {
             .sort((a, b) => b.score - a.score || String(a.e.name).localeCompare(String(b.e.name)))
             .slice(0, limit)
             .map(({ e, score }) => ({
-                code: e.code, name: e.name, originalName: e.originalName,
+                _id: e._id, code: e.code, name: e.name, originalName: e.originalName,
                 year: e.year, _score: score,
             }));
     }
@@ -307,7 +313,7 @@ export class FilmSearchIndex {
             .sort((a, b) => b.score - a.score || String(a.e.name).localeCompare(String(b.e.name)))
             .slice(0, limit)
             .map(({ e, score }) => ({
-                code: e.code, name: e.name, originalName: e.originalName,
+                _id: e._id, code: e.code, name: e.name, originalName: e.originalName,
                 year: e.year, _score: score,
             }));
     }
