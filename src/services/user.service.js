@@ -60,7 +60,7 @@ export const UserService = {
         // (odatda 0 ta qo'shimcha so'rov) — jami ~1 ta DB safari.
         const [existingUser, activeChannels] = await Promise.all([
             UserModel.findOne(byTelegramId(body.telegram_id))
-                .select("channels_condition")
+                .select("channels_condition started")
                 .lean(),
             ChannelService.getChannels()
         ]);
@@ -112,33 +112,56 @@ export const UserService = {
         }
 
         /**
-         * A'zolik O'ZGARGAN bo'lsa — hodisa yozuvi.
+         * BOT ORQALI qo'shilish va chiqish hodisalari.
          *
-         * `channels_condition` faqat hozirgi holatni saqlaydi, shuning
-         * uchun "qachon qo'shildi, qachon chiqdi" degan savolga javob
-         * yo'q edi. Bu yer yagona o'tish nuqtasi: obuna tekshiruvi ham,
-         * kanaldagi chat_member hodisasi ham shu metodga keladi.
+         * Ikki shart, ikkalasi ham majburiy:
          *
-         * Faqat BIZNING foydalanuvchimiz (started) hisobga olinadi —
-         * botni ochmagan, kanalga chetdan kelgan odam bu yerga tushmaydi.
+         *   1) Odam botga O'ZI yozgan bo'lishi kerak (bazadagi `started`).
+         *      Ilgari bu tekshirilmagan edi: bazada majburiy kanaldan kelgan
+         *      56 mingdan ortiq eski yozuv bor va ular kanalga kirib-chiqib
+         *      turadi — natijada botda 62 ta foydalanuvchi bo'la turib
+         *      grafikda 7 kunda 59 ta "chiqib ketgan" ko'rindi.
+         *
+         *   2) Chiqish faqat BOT ORQALI qo'shilgani yozilgan odam uchun.
+         *      Botni ochishdan oldin ham kanalda bo'lgan odam chiqsa, u
+         *      majburiy obuna samarasini ko'rsatmaydi. Qo'shilish yozilganda
+         *      kanal holatiga `joined_via_bot` belgisi qo'yiladi, chiqishda
+         *      shu belgi tekshiriladi va olib tashlanadi.
+         *
+         * Bot birinchi marta ko'rgan holat (`before === undefined`) hodisa
+         * emas — bu faqat ro'yxatga olish, odam harakat qilmagan.
          */
-        if (body.channels_condition && existingUser) {
-            const wasMember = new Map(
-                (existingUser.channels_condition || []).map((c) => [c.telegram_id, c.is_member === true])
+        if (body.channels_condition && existingUser?.started) {
+            const previous = new Map(
+                (existingUser.channels_condition || []).map((c) => [c.telegram_id, c])
             );
 
             const events = [];
             for (const c of body.channels_condition) {
-                const before = wasMember.get(c.telegram_id);
-                // Yangi kanal (before === undefined) hali hodisa emas:
-                // bu shunchaki ro'yxatga qo'shilgani, odam harakat qilmagan
-                if (before === undefined || before === (c.is_member === true)) continue;
-                events.push({
-                    telegram_id: String(body.telegram_id),
-                    channel_id: c.telegram_id,
-                    channel_name: c.name,
-                    action: c.is_member ? "join" : "leave",
-                });
+                const old = previous.get(c.telegram_id);
+                const before = old ? old.is_member === true : undefined;
+                const now = c.is_member === true;
+                if (before === undefined || before === now) continue;
+
+                if (now) {
+                    c.joined_via_bot = true;
+                    events.push({
+                        telegram_id: String(body.telegram_id),
+                        channel_id: c.telegram_id,
+                        channel_name: c.name,
+                        action: "join",
+                    });
+                } else {
+                    if (old.joined_via_bot === true) {
+                        events.push({
+                            telegram_id: String(body.telegram_id),
+                            channel_id: c.telegram_id,
+                            channel_name: c.name,
+                            action: "leave",
+                        });
+                    }
+                    c.joined_via_bot = false;
+                }
             }
 
             if (events.length) {
