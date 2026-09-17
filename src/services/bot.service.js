@@ -76,6 +76,16 @@ export const BotService = {
             botId: tenant.botId,
             username: tenant.username,
             active: tenant.active,
+            /**
+             * Botning media ("cloud") kanali — panel film/qism yaratishda
+             * "Kanal ID" maydonini shu bilan o'zi to'ldiradi.
+             *
+             * Bazada kanal "-100" prefiksisiz saqlanadi ("3831468244"),
+             * .env da esa to'liq ko'rinishda ("-1003831468244") turadi —
+             * panel aynan bazadagi ko'rinishni oladi. Aralash botda kanal
+             * yo'q (u kontent yaratmaydi) — null.
+             */
+            channelId: tenant.channelId ? String(tenant.channelId).replace(/^-100/, "") : null,
         };
     },
 

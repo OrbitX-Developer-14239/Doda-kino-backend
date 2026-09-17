@@ -100,6 +100,20 @@ router.get("/code/:code", botOrAdmin(["superadmin", "admin"]), EpisodeController
 
 /**
  * @swagger
+ * /api/episode/next-code:
+ *   get:
+ *     summary: Keyingi bo'sh qism kodlari (100 dan boshlab eng kichiklari)
+ *     tags: [Episodes]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: count, schema: { type: integer, default: 1, maximum: 100 } }
+ *     responses:
+ *       200: { description: "data: { codes: [...] }" }
+ */
+router.get("/next-code", authMiddleware(["superadmin", "admin"]), EpisodeController.nextCodes)
+
+/**
+ * @swagger
  * /api/episode/ai-suggest:
  *   post:
  *     summary: AI orqali qism ma'lumotlarini tayyorlash (bazaga yozmaydi)

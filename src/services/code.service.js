@@ -5,29 +5,25 @@ import { codeSpaceStores } from "../core/tenant-registry.js";
 export const FILM_CODE_MIN = 50000;
 export const EPISODE_CODE_MIN = 100;
 
-const FILM_STEP = 50;
-const EPISODE_STEP = 1;
-
 /**
- * Band bo'lmagan kodlarni tanlaydi.
+ * Band bo'lmagan kodlarni tanlaydi — ENG KICHIK bo'sh raqamdan, bittalab.
  *
- * Mavjud eng katta koddan boshlab yuqoriga qarab bo'sh joy qidiriladi —
- * shunda kodlar tartibli o'sib boradi va eski o'chirilgan kodlar qayta
- * ishlatilmaydi (bot foydalanuvchilari eski kodni yodda saqlagan bo'lishi mumkin).
+ * Ilgari mavjud eng katta koddan keyin qidirilardi va film kodi 50 ga
+ * oshib borardi (51200, 51250, ...). Kodlar tez kattalashib ketardi,
+ * oradagi bo'sh raqamlar esa hech qachon ishlatilmasdi. Foydalanuvchi
+ * botga kodni qo'lda yozadi — qisqa kod qulayroq.
+ *
+ * Endi: film 50000 dan, qism 100 dan boshlab birinchi band bo'lmagan
+ * raqam olinadi. Mavjud kodlarga tegilmaydi, ular shunchaki o'tkazib
+ * yuboriladi.
+ *
+ * DIQQAT: o'chirilgan filmning kodi ham bo'shaydi va keyingi yangi filmga
+ * berilishi mumkin — eski kodni eslab qolgan odam boshqa filmni ko'radi.
  */
-const pickFreeCodes = (takenSet, min, step, count) => {
-    let candidate = min;
-    for (const code of takenSet) {
-        if (code >= candidate) candidate = code + step;
-    }
-
+const pickFreeCodes = (takenSet, min, count) => {
     const picked = [];
-    while (picked.length < count) {
-        if (!takenSet.has(candidate)) {
-            picked.push(candidate);
-            takenSet.add(candidate);
-        }
-        candidate += step;
+    for (let candidate = min; picked.length < count; candidate++) {
+        if (!takenSet.has(candidate)) picked.push(candidate);
     }
     return picked;
 };
@@ -52,12 +48,12 @@ const takenCodes = async (field) => {
 export const CodeService = {
     /** Bo'sh film kodi (>= 50000) */
     async nextFilmCodes(count = 1) {
-        return pickFreeCodes(await takenCodes("Film"), FILM_CODE_MIN, FILM_STEP, count);
+        return pickFreeCodes(await takenCodes("Film"), FILM_CODE_MIN, count);
     },
 
     /** Bo'sh epizod kodlari (>= 100) */
     async nextEpisodeCodes(count = 1) {
-        return pickFreeCodes(await takenCodes("Episode"), EPISODE_CODE_MIN, EPISODE_STEP, count);
+        return pickFreeCodes(await takenCodes("Episode"), EPISODE_CODE_MIN, count);
     },
 
     /** Kod maydonida shu kod allaqachon bandmi */

@@ -35,6 +35,18 @@ router.get("/", botOrAdmin(["superadmin", "admin"]), FilmController.getFilmsList
 
 /**
  * @swagger
+ * /api/film/next-code:
+ *   get:
+ *     summary: Keyingi bo'sh film kodi (50000 dan boshlab eng kichigi)
+ *     tags: [Films]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "data: { code }" }
+ */
+router.get("/next-code", authMiddleware(["superadmin", "admin"]), FilmController.nextCode)
+
+/**
+ * @swagger
  * /api/film/code/{code}:
  *   get:
  *     summary: Search film by code

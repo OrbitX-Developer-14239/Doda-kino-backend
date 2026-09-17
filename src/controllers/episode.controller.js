@@ -5,6 +5,13 @@ import { FilmService } from "../services/film.service.js";
 import { catchAsync } from "../utils/catchAsync.js";
 
 export const EpisodeController = {
+    /** Keyingi bo'sh qism kodlari — forma ochilganda (AI'siz, tez). ?count=1..100 */
+    nextCodes: catchAsync(async (req, res) => {
+        const count = Math.min(Math.max(parseInt(req.query.count) || 1, 1), 100);
+        const codes = await CodeService.nextEpisodeCodes(count);
+        res.status(200).json({ success: true, data: { codes } });
+    }),
+
     /**
      * Qism uchun AI taklifi + bo'sh kod. Bazaga hech narsa yozmaydi.
      * `filmId` berilsa serial nomi/yili/davlati bazadan olinadi,
