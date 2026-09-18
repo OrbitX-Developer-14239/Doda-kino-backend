@@ -2,7 +2,7 @@ import { LogModel } from "../models/log.model.js";
 
 export const LogService = {
     async getAllLogs(queryParams) {
-        const { time, level, source, bot, page = 1, limit = 50 } = queryParams;
+        const { time, level, source, bot, q, page = 1, limit = 50 } = queryParams;
 
         let filter = {};
 
@@ -42,7 +42,15 @@ export const LogService = {
             filter['metadata.bots'] = String(bot);
         }
 
-        const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
+        // Matn bo'yicha qidiruv (katta-kichik harf farqsiz). Maxsus belgilar
+        // ekranlanadi — "[bot" kabi so'rov regex xatosi bermasin.
+        const text = String(q ?? "").trim().slice(0, 200);
+        if (text) {
+            filter.message = { $regex: text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+        }
+
+        // Jurnal sahifasi bir oynada 2000 qatorgacha ko'rsatadi
+        const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 2000);
         const safePage = Math.max(parseInt(page) || 1, 1);
         const skip = (safePage - 1) * safeLimit;
 
