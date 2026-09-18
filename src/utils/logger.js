@@ -22,6 +22,10 @@ export const detectBots = (message, tenantBotId) => {
     for (const m of String(message ?? "").matchAll(/\d{8,12}/g)) {
         if (KNOWN_BOT_IDS.has(m[0])) found.add(m[0]);
     }
+    // Hamma botni sanab o'tadigan xabar ("Botlar: 7 ta sozlangan (...)")
+    // biror botga emas, butun tizimga tegishli — aks holda u har bir
+    // botning jurnalida takrorlanib chiqardi
+    if (!tenantBotId && KNOWN_BOT_IDS.size > 2 && found.size === KNOWN_BOT_IDS.size) return [];
     return [...found];
 };
 
