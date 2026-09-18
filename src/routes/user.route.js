@@ -44,12 +44,12 @@ router.put("/", botOrAdmin(["superadmin", "admin"]), validate(updateUserValidati
  *         name: is_subscribed
  *         schema:
  *           type: boolean
- *         description: Filter by subscribed users (true|false)
+ *         description: Filter by subscription status (true|false). With channel_id it applies to that channel only, otherwise to all mandatory channels.
  *       - in: query
  *         name: channel_id
  *         schema:
  *           type: string
- *         description: Filter by users currently subscribed to a specific channel (e.g. -1001373821225)
+ *         description: Scope is_subscribed and the returned counts to one channel (e.g. -1001373821225)
  *     responses:
  *       200:
  *         description: List of users

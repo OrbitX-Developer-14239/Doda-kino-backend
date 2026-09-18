@@ -212,55 +212,62 @@ export const UserService = {
          * foydalanuvchilar" soni haqiqatdan 900 barobar katta chiqardi.
          * Bu yo'l faqat admin uchun (bot bu ro'yxatni so'ramaydi).
          */
-        let filter = {};
-        let andConditions = [{ started: true }];
+        const base = [{ started: true }];
 
+        /**
+         * Obuna holati. Kanal tanlanganda — faqat SHU kanal bo'yicha,
+         * aks holda barcha majburiy kanallar bo'yicha (hammasiga a'zo).
+         */
+        let subscribedCond, unsubscribedCond;
         if (channel_id) {
-            andConditions.push({
-                channels_condition: { $elemMatch: { telegram_id: channel_id, is_member: true } }
-            });
-        }
-
-        if (is_subscribed === 'true') {
-            andConditions.push({
+            const member = { $elemMatch: { telegram_id: String(channel_id), is_member: true } };
+            subscribedCond = { channels_condition: member };
+            unsubscribedCond = { channels_condition: { $not: member } };
+        } else {
+            subscribedCond = {
                 channels_condition: {
                     $exists: true,
                     $type: 'array',
                     $ne: [],
                     $not: { $elemMatch: { is_member: false } }
                 }
-            });
-        } else if (is_subscribed === 'false') {
-            andConditions.push({
+            };
+            unsubscribedCond = {
                 $or: [
                     { channels_condition: { $exists: false } },
                     { channels_condition: { $size: 0 } },
                     { channels_condition: { $elemMatch: { is_member: false } } }
                 ]
-            });
+            };
         }
 
-        if (andConditions.length > 0) {
-            filter.$and = andConditions;
-        }
+        const andConditions = [...base];
+        if (is_subscribed === 'true') andConditions.push(subscribedCond);
+        else if (is_subscribed === 'false') andConditions.push(unsubscribedCond);
+        const filter = { $and: andConditions };
 
         // Limit validatsiya bosqichida 200 bilan cheklangan; bu yerda qo'shimcha himoya.
         const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
         const safePage = Math.max(parseInt(page) || 1, 1);
         const skip = (safePage - 1) * safeLimit;
 
-        const [users, totalDocs] = await Promise.all([
+        const [users, totalDocs, all, subscribed] = await Promise.all([
             UserModel.find(filter)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(safeLimit)
                 .lean(),
-            UserModel.countDocuments(filter)
+            UserModel.countDocuments(filter),
+            // Holat filtridan qat'i nazar jami va obunachilar soni —
+            // panel kartochkalari sahifadagi 50 ta emas, hammasini sanaydi
+            UserModel.countDocuments({ $and: base }),
+            UserModel.countDocuments({ $and: [...base, subscribedCond] }),
         ]);
 
         return {
             users,
             totalDocs,
+            counts: { all, subscribed, unsubscribed: all - subscribed },
             page: safePage,
             limit: safeLimit,
             totalPages: Math.ceil(totalDocs / safeLimit)
