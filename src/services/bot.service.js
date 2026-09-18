@@ -32,7 +32,7 @@ export const BotService = {
                     { $set: { username: me.username } },
                     { upsert: true }
                 );
-                logger.info(`[Bot] Registr yangilandi: ${tenant.botId} @${me.username}`);
+                logger.verbose(`[Bot] Registr yangilandi: ${tenant.botId} @${me.username}`);
             } catch (error) {
                 logger.warn(`[Bot] ${tenant.botId} uchun getMe ishlamadi: ${error.message}`);
                 await BotModel.updateOne(

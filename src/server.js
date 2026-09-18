@@ -15,7 +15,7 @@ import { logger } from "./utils/logger.js";
 let server;
 
 const shutdown = async (signal) => {
-    logger.info(`${signal} qabul qilindi — server to'xtatilmoqda...`);
+    logger.verbose(`${signal} qabul qilindi — server to'xtatilmoqda...`);
 
     const timer = setTimeout(() => {
         logger.error("Graceful shutdown 10s ichida tugamadi — majburiy chiqish.");
@@ -28,7 +28,7 @@ const shutdown = async (signal) => {
         await closeSocket();
         await cache.disconnect();
         await Promise.all([mainConn.close(), closeTenants()]);
-        logger.info("Barcha ulanishlar yopildi. Xayr!");
+        logger.verbose("Barcha ulanishlar yopildi. Xayr!");
         process.exit(0);
     } catch (error) {
         logger.error(`Shutdown xatosi: ${error.message}`);
@@ -55,17 +55,20 @@ const startServer = async () => {
         initSocket(server);
 
         server.listen(CONFIG.PORT, () => {
-            logger.info(`Server running on http://localhost:${CONFIG.PORT}`);
+            logger.verbose(`Server running on http://localhost:${CONFIG.PORT}`);
 
-            const active = allTenants().filter((t) => t.active);
-            logger.info(`Botlar: ${allTenants().length} ta sozlangan, ${active.length} ta faol (${active.map((t) => t.botId).join(", ")})`);
+            // Jurnalga bitta qisqa qator. Ulanmagan bot bo'lsa u alohida
+            // xato sifatida yozilgan (tenant-registry) — bu yerda faqat son.
+            const all = allTenants();
+            const active = all.filter((t) => t.active);
+            logger.info(`Server ishga tushdi — ${active.length}/${all.length} bot faol`);
 
             // Amaldagi CORS sozlamasi loglarga chiqadi. pm2 muhit o'zgaruvchilarini
             // keshlaydi va dotenv mavjud qiymatlarni ustidan yozmaydi — shu sababli
             // .env tahrirlangani bilan eski ro'yxat ishlab turishi mumkin.
             // Bu qator qaysi ro'yxat HAQIQATDA kuchda ekanini darhol ko'rsatadi.
-            logger.info(`CORS ruxsat etilgan manbalar: ${CONFIG.CORS_ORIGINS.join(", ") || "(bo'sh)"}`);
-            logger.info(`CORS localhost (istalgan port): ${CONFIG.CORS_ALLOW_LOCALHOST ? "yoqilgan" : "o'chirilgan"}`);
+            logger.verbose(`CORS ruxsat etilgan manbalar: ${CONFIG.CORS_ORIGINS.join(", ") || "(bo'sh)"}`);
+            logger.verbose(`CORS localhost (istalgan port): ${CONFIG.CORS_ALLOW_LOCALHOST ? "yoqilgan" : "o'chirilgan"}`);
         });
 
         // Fon ishlari — listen() ni bloklamaydi:
@@ -89,7 +92,7 @@ const startServer = async () => {
             if (!tenant.active) continue;
             tenant.searchIndex.init()
                 .then(({ source, count }) => {
-                    logger.info(`Qidiruv indeksi [bot ${tenant.botId}]: ${count} ta film (${source})`);
+                    logger.verbose(`Qidiruv indeksi [bot ${tenant.botId}]: ${count} ta film (${source})`);
                 })
                 .catch((error) => {
                     logger.warn(`Qidiruv indeksi [bot ${tenant.botId}] qurilmadi: ${error.message}`);

@@ -64,6 +64,25 @@ app.use(cors((req, callback) => {
 
 app.use(express.json({ limit: "100kb" }))
 
+/**
+ * Jurnal uchun shovqin bo'lgan 4xx:
+ *  - /api dan tashqaridagi har qanday yo'l — bu bizning mijoz emas,
+ *    zaiflik qidirayotgan skaner;
+ *  - CORS rad etish — begona sayt;
+ *  - refresh token yo'q/eskirgan — sessiya muddati tugagan, odatiy hol.
+ */
+const isNoise = (req, status, message) =>
+    !req.originalUrl.startsWith("/api/") ||
+    String(message).startsWith("CORS:") ||
+    (req.originalUrl.startsWith("/api/admin/refresh") && (status === 401 || status === 403));
+
+/** Xato qaysi faylda chiqqani: " (instagram.service.js:270)" */
+const errorOrigin = (err) => {
+    const frame = String(err?.stack || "").split("\n").find((l) => l.includes("/src/"));
+    const m = frame && frame.match(/([\w.-]+\.js):(\d+)/);
+    return m ? ` (${m[1]}:${m[2]})` : "";
+};
+
 app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
         logger.warn(`⚠️ [Express] Noto'g'ri JSON formati keldi: ${err.message}`);
@@ -200,7 +219,13 @@ app.use((err, req, res, next) => {
     status = status || 500;
 
     if (status >= 500) {
-        logger.error(`GLOBAL ERROR 🔥: ${err.stack}`)
+        // Jurnalga qisqa: nima, qayerda. To'liq stack faqat terminalda.
+        logger.error(`[${status}] ${req.method} ${req.originalUrl} — ${err.message}${errorOrigin(err)}`)
+        logger.verbose(err.stack)
+    } else if (isNoise(req, status, message)) {
+        // Internetdagi skanerlar (/wp-json, /graphql ...) va sessiya
+        // muddati tugashi — kutilgan holat, jurnalni to'ldirmasin
+        logger.verbose(`[${status}] ${req.method} ${req.originalUrl} — ${message}`)
     } else {
         logger.warn(`[${status}] ${req.method} ${req.originalUrl} — ${message}`)
     }

@@ -276,7 +276,7 @@ export const initTenants = async () => {
                 const contentInfo = tenant.content.stores
                     .map((s) => `${s.conn.host}/${s.conn.name}`)
                     .join(" + ");
-                logger.info(
+                logger.verbose(
                     `[Tenant] Bot ${tenant.botId} ulandi: content=${contentInfo}, data=${tenant.dataConn.host}/${tenant.dataConn.name}`
                 );
             } catch (error) {
@@ -298,12 +298,12 @@ export const initTenants = async () => {
     }
     for (const ids of groups.values()) {
         if (ids.length > 1) {
-            logger.info(`[Tenant] Bitta film bazasini bo'lishayotgan botlar: ${ids.join(", ")}`);
+            logger.verbose(`[Tenant] Bitta film bazasini bo'lishayotgan botlar: ${ids.join(", ")}`);
         }
     }
     for (const t of tenants.values()) {
         if (!t.content.readOnly) continue;
-        logger.info(
+        logger.verbose(
             `[Tenant] Bot ${t.botId} — ARALASH: kontent ${t.sourceBotIds.join(" + ")} botlarnikidan o'qiladi (yozish yo'q)`
         );
     }

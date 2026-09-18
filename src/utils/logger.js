@@ -62,8 +62,18 @@ const consoleFormat = printf(({ level, message, timestamp, stack }) => {
     return `${timestamp} [${level.toUpperCase()}]: ${stack || message}`;
 });
 
+/**
+ * DARAJALAR — nima qayerga yoziladi:
+ *   error / warn / info -> terminal + baza (panel jurnali) + jonli oqim
+ *   verbose             -> FAQAT terminal (pm2 logs)
+ *
+ * Panel jurnali muhim hodisalar uchun: xatolar, ogohlantirishlar va
+ * ma'noli ish natijalari (reklama yuborildi, server ishga tushdi).
+ * Ishga tushishdagi texnik tafsilotlar (har botning ulanishi, indeks,
+ * CORS) verbose — ular har deployda 30 qatorlab jurnalni to'ldirardi.
+ */
 export const logger = winston.createLogger({
-    level: "info",
+    level: "verbose",
     defaultMeta: { source: 'backend' },
     format: combine(
         tagBots(),
@@ -80,9 +90,7 @@ export const logger = winston.createLogger({
             )
         }),
         new winston.transports.MongoDB({
-            // "info" ham bazaga yoziladi — panelda tizim hodisalari (ishga
-            // tushish, indeks, bot registri) ko'rinib tursin. Hajm xavfi yo'q:
-            // so'rovlar per-request loglanmaydi, info yozuvlari kam.
+            // verbose bazaga TUSHMAYDI (yuqoridagi izoh)
             level: "info",
             // Loglar endi MAIN clusterga yoziladi (multibot: umumiy narsalar shu yerda).
             // dbName aniq ko'rsatiladi — MAIN URI da yo'l qismi yo'q, usiz "test" ga yozardi.
