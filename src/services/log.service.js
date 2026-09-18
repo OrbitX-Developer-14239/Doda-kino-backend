@@ -2,7 +2,7 @@ import { LogModel } from "../models/log.model.js";
 
 export const LogService = {
     async getAllLogs(queryParams) {
-        const { time, level, source, page = 1, limit = 50 } = queryParams;
+        const { time, level, source, bot, page = 1, limit = 50 } = queryParams;
 
         let filter = {};
 
@@ -27,8 +27,19 @@ export const LogService = {
             if (levels.length) filter.level = { $in: levels };
         }
 
+        // winston-mongodb qo'shimcha maydonlarni "metadata" ichiga yozadi.
+        // Ilgari bu yerda "meta.source" edi — bunday maydon yo'q, shuning
+        // uchun manba filtri doim bo'sh natija qaytarardi.
         if (source) {
-            filter['meta.source'] = String(source);
+            filter['metadata.source'] = String(source);
+        }
+
+        // bot=<id> — shu botga tegishli loglar; bot=none — hech bir botga
+        // bog'lanmagan umumiy tizim loglari (ishga tushish, CORS va h.k.)
+        if (bot === 'none') {
+            filter['metadata.bots.0'] = { $exists: false };
+        } else if (bot) {
+            filter['metadata.bots'] = String(bot);
         }
 
         const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 200);

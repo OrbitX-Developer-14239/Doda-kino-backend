@@ -29,6 +29,8 @@ logSchema.index({ timestamp: -1, level: 1 });
 // { timestamp: -1 } kaliti bilan, lekin "timestamp_1" nomi bilan yaratadi.
 // Sxemadagi { timestamp: 1 } ham xuddi shu nomni talab qiladi va indeks
 // yaratish "IndexOptionsConflict" bilan yiqiladi.
-logSchema.index({ "meta.source": 1, timestamp: -1 });
+logSchema.index({ "metadata.source": 1, timestamp: -1 });
+// Panelda "shu botning loglari" filtri
+logSchema.index({ "metadata.bots": 1, timestamp: -1 });
 
 export const LogModel = mainConn.model("Log", logSchema, "server_logs");

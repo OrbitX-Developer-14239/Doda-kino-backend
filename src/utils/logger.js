@@ -2,6 +2,33 @@ import winston from "winston";
 import "winston-mongodb";
 import { CONFIG } from "../config/index.js";
 import TransportStream from "winston-transport";
+import { currentTenant } from "../core/tenant-context.js";
+
+const KNOWN_BOT_IDS = new Set(CONFIG.BOTS.map((b) => String(b.botId)));
+
+/**
+ * Log qaysi bot(lar)ga tegishli — panelda "shu botning loglari"
+ * filtri uchun. Ikki manbadan olinadi:
+ *   1) so'rov konteksti — /api/<botId>/... ichida yozilgan har qanday log;
+ *   2) xabar matni — kontekstsiz yoziladigan tizim loglari botni o'zi
+ *      nomlaydi: "Qidiruv indeksi [bot 8887969510]", "Registr yangilandi:
+ *      8887969510 @doda_kino_bot". Faqat HAQIQIY bot ID lari olinadi,
+ *      xabardagi boshqa uzun raqamlar (telegram ID va h.k.) emas.
+ * Hech biri topilmasa bo'sh massiv — bu umumiy (tizim) logi.
+ */
+export const detectBots = (message, tenantBotId) => {
+    const found = new Set();
+    if (tenantBotId) found.add(String(tenantBotId));
+    for (const m of String(message ?? "").matchAll(/\d{8,12}/g)) {
+        if (KNOWN_BOT_IDS.has(m[0])) found.add(m[0]);
+    }
+    return [...found];
+};
+
+const tagBots = winston.format((info) => {
+    info.bots = detectBots(info.stack || info.message, currentTenant()?.botId);
+    return info;
+});
 
 class SocketTransport extends TransportStream {
     constructor(opts) {
@@ -35,9 +62,10 @@ export const logger = winston.createLogger({
     level: "info",
     defaultMeta: { source: 'backend' },
     format: combine(
+        tagBots(),
         timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
         errors({ stack: true }),
-        metadata({ fillExcept: ['message', 'level', 'timestamp', 'source'] }),
+        metadata({ fillExcept: ['message', 'level', 'timestamp', 'source', 'bots'] }),
         json()
     ),
     transports: [
