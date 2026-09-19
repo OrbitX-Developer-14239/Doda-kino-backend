@@ -30,6 +30,18 @@ export const createUserValidation = z.object({
 
 export const updateUserValidation = createUserValidation;
 
+/**
+ * Bot shaxsiy chatdagi `my_chat_member` hodisasini yuboradi:
+ *   kicked  -> foydalanuvchi botni bloklagan
+ *   member  -> blokdan chiqargan (qayta ishga tushirgan)
+ */
+export const botStatusValidation = z.object({
+    body: z.object({
+        telegram_id: telegramId,
+        status: z.enum(["kicked", "member"]),
+    }).strip(),
+});
+
 export const getUserByTelegramIdValidation = z.object({
     params: z.object({
         telegram_id: telegramId,

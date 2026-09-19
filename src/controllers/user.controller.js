@@ -17,6 +17,12 @@ export const userController = {
         res.status(200).json({ success: true, data })
     }),
 
+    setBotStatus: catchAsync(async (req, res) => {
+        const data = await UserService.setBotStatus(req.body)
+
+        res.status(200).json({ success: true, data })
+    }),
+
     getUsers: catchAsync(async (req, res) => {
         const data = await UserService.getUsers(req.query)
 

@@ -33,7 +33,7 @@ const byTelegramId = (value) => ({ telegram_id: String(value) });
  * Bazada hozir 24 ta bloklagan va 56 mingdan ortiq "yetib bo'lmaydi"
  * belgili yozuv bor, ya'ni bu jim yo'qotish katta bo'lishi mumkin edi.
  */
-const PROOF_OF_LIFE = { started: true, blocked: false, unreachable: false };
+const PROOF_OF_LIFE = { started: true, blocked: false, blocked_at: null, unreachable: false };
 
 /** buildUpdateDoc natijasiga qo'shimcha maydonlarni qo'shadi */
 const withSet = (doc, extra) => ({ ...doc, $set: { ...(doc.$set || {}), ...extra } });
@@ -272,6 +272,25 @@ export const UserService = {
             limit: safeLimit,
             totalPages: Math.ceil(totalDocs / safeLimit)
         };
+    },
+
+    /**
+     * Foydalanuvchi botni bloklagan / blokdan chiqargan — Telegram buni
+     * darhol xabar qiladi (`my_chat_member`, shaxsiy chat).
+     *
+     * FAQAT mavjud yozuv yangilanadi, yangi yaratilmaydi: bloklash botga
+     * "yozish" emas va bazada bo'lmagan odam uchun yozuv ochish yana
+     * fantom foydalanuvchilarni ko'paytirardi.
+     */
+    async setBotStatus({ telegram_id, status }) {
+        const blocked = status === "kicked";
+        const res = await UserModel.updateOne(
+            byTelegramId(telegram_id),
+            blocked
+                ? { $set: { blocked: true, blocked_at: new Date() } }
+                : { $set: { blocked: false, blocked_at: null } }
+        );
+        return { matched: res.matchedCount > 0, blocked };
     },
 
     async getUserByTelegramId(telegram_id) {

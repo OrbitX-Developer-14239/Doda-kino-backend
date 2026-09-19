@@ -8,6 +8,7 @@ import {
     updateUserValidation,
     listUsersValidation,
     getUserByTelegramIdValidation,
+    botStatusValidation,
 } from "../validations/user.validation.js";
 
 const router = Router()
@@ -21,6 +22,8 @@ const router = Router()
 
 router.post("/", botOrAdmin(["superadmin", "admin"]), validate(createUserValidation), userController.createUser)
 router.put("/", botOrAdmin(["superadmin", "admin"]), validate(updateUserValidation), userController.updateUser)
+// Bot: foydalanuvchi botni bloklagani / blokdan chiqargani (my_chat_member)
+router.post("/bot-status", botOrAdmin(["superadmin", "admin"]), validate(botStatusValidation), userController.setBotStatus)
 
 /**
  * @swagger

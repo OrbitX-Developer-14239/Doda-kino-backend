@@ -18,6 +18,11 @@ export const userSchema = new Schema({
 
     blocked: { type: Boolean, default: false },
 
+    // Botni qachon bloklagani. Telegram `my_chat_member` (kicked) hodisasi
+    // yoki reklama yuborishdagi 403 javobi bilan yoziladi; blokdan
+    // chiqarilganda o'chiriladi.
+    blocked_at: { type: Date, default: null },
+
     // Botga hech qachon YOZMAGAN foydalanuvchi. Bunday yozuvlar majburiy
     // obuna kanaliga qo'shilgan odamlardan paydo bo'ladi: bot ularni
     // bazaga yozadi, lekin Telegram qoidasi bo'yicha suhbatni BOT

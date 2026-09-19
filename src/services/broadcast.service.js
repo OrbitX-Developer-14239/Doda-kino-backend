@@ -320,7 +320,7 @@ export const BroadcastService = {
                     this._markUser(tenant, userId, { unreachable: true });
                 } else {
                     stat.blocked++;
-                    this._markUser(tenant, userId, { blocked: true });
+                    this._markUser(tenant, userId, { blocked: true, blocked_at: new Date() });
                 }
                 return;
             }
