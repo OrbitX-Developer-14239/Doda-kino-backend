@@ -200,7 +200,7 @@ export const UserService = {
     },
 
     async getUsers(queryParams) {
-        const { page = 1, limit = 50, is_subscribed, channel_id } = queryParams;
+        const { page = 1, limit = 50, is_subscribed, channel_id, bot_status } = queryParams;
 
         /**
          * FAQAT botga o'zi yozgan foydalanuvchilar.
@@ -241,9 +241,22 @@ export const UserService = {
             };
         }
 
+        /**
+         * Bot bilan aloqa holati:
+         *   blocked     — botni bloklagan (Telegram 403 / my_chat_member kicked)
+         *   unreachable — akkaunti o'chirilgan: bloklamagan, lekin yozib bo'lmaydi
+         *   active      — qolganlari, bot xabar yubora oladi
+         */
+        const BOT_STATUS = {
+            blocked: { blocked: true },
+            unreachable: { unreachable: true, blocked: { $ne: true } },
+            active: { blocked: { $ne: true }, unreachable: { $ne: true } },
+        };
+
         const andConditions = [...base];
         if (is_subscribed === 'true') andConditions.push(subscribedCond);
         else if (is_subscribed === 'false') andConditions.push(unsubscribedCond);
+        if (BOT_STATUS[bot_status]) andConditions.push(BOT_STATUS[bot_status]);
         const filter = { $and: andConditions };
 
         // Limit validatsiya bosqichida 200 bilan cheklangan; bu yerda qo'shimcha himoya.
@@ -251,7 +264,7 @@ export const UserService = {
         const safePage = Math.max(parseInt(page) || 1, 1);
         const skip = (safePage - 1) * safeLimit;
 
-        const [users, totalDocs, all, subscribed] = await Promise.all([
+        const [users, totalDocs, all, subscribed, blocked, unreachable] = await Promise.all([
             UserModel.find(filter)
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -262,12 +275,14 @@ export const UserService = {
             // panel kartochkalari sahifadagi 50 ta emas, hammasini sanaydi
             UserModel.countDocuments({ $and: base }),
             UserModel.countDocuments({ $and: [...base, subscribedCond] }),
+            UserModel.countDocuments({ $and: [...base, BOT_STATUS.blocked] }),
+            UserModel.countDocuments({ $and: [...base, BOT_STATUS.unreachable] }),
         ]);
 
         return {
             users,
             totalDocs,
-            counts: { all, subscribed, unsubscribed: all - subscribed },
+            counts: { all, subscribed, unsubscribed: all - subscribed, blocked, unreachable },
             page: safePage,
             limit: safeLimit,
             totalPages: Math.ceil(totalDocs / safeLimit)

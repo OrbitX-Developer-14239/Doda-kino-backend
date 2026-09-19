@@ -56,5 +56,7 @@ export const listUsersValidation = z.object({
         limit: z.coerce.number().int().catch(50).transform((v) => Math.min(Math.max(v, 1), 200)),
         is_subscribed: z.enum(["true", "false"]).optional(),
         channel_id: z.string().max(64).optional(),
+        // Bot bilan aloqa holati: faol / botni bloklagan / akkaunti o'chirilgan
+        bot_status: z.enum(["active", "blocked", "unreachable"]).optional(),
     }).strip(),
 });
