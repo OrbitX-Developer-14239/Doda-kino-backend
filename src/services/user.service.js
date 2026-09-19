@@ -200,7 +200,7 @@ export const UserService = {
     },
 
     async getUsers(queryParams) {
-        const { page = 1, limit = 50, is_subscribed, channel_id, bot_status } = queryParams;
+        const { page = 1, limit = 50, is_subscribed, channel_id, bot_status, q } = queryParams;
 
         /**
          * FAQAT botga o'zi yozgan foydalanuvchilar.
@@ -257,6 +257,15 @@ export const UserService = {
         if (is_subscribed === 'true') andConditions.push(subscribedCond);
         else if (is_subscribed === 'false') andConditions.push(unsubscribedCond);
         if (BOT_STATUS[bot_status]) andConditions.push(BOT_STATUS[bot_status]);
+
+        // Qidiruv: ism yoki username ichida (katta-kichik harf farqsiz).
+        // "@ali" ham "ali" deb qidiriladi. Maxsus belgilar ekranlanadi —
+        // foydalanuvchi yozgan "(" yoki "+" regex xatosi bermasin.
+        const text = String(q ?? "").trim().replace(/^@/, "");
+        if (text) {
+            const rx = { $regex: text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+            andConditions.push({ $or: [{ first_name: rx }, { username: rx }] });
+        }
         const filter = { $and: andConditions };
 
         // Limit validatsiya bosqichida 200 bilan cheklangan; bu yerda qo'shimcha himoya.
