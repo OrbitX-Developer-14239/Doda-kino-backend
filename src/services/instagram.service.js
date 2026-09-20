@@ -74,84 +74,96 @@ export class InstagramService {
    */
   async getPostsStatistics() {
     try {
-      // Insights uchun alohida ruxsat so'ramaslik kerak (Tokenlarning ko'pchiligiga 'instagram_manage_insights' ruxsati berilmagan va #10 error beradi)
+      /**
+       * Statistika (views, reach, shares, saved) AYNAN shu so'rovda,
+       * `insights` ichki so'rovi bilan olinadi — har post uchun alohida
+       * so'rov yuborilmaydi.
+       *
+       * ILGARI QANDAY EDI: token'da `instagram_manage_insights` ruxsati
+       * yo'q edi va bu raqamlar laykdan FORMULA bilan o'ylab chiqarilardi
+       * (`likes * 12 + ...`). Layk nol bo'lgani uchun hamma post bir xil
+       * "2 ko'rish" bo'lib ko'rinardi. Endi haqiqiy qiymat keladi, Instagram
+       * bermasa — null (panel "—" ko'rsatadi, soxta raqam emas).
+       */
       const response = await this.api.get(`/${this.businessAccountId}/media`, {
-        params: { fields: 'id,caption,media_type,media_url,permalink,thumbnail_url,like_count,comments_count,timestamp' }
+        params: {
+          fields:
+            'id,caption,media_type,media_product_type,media_url,permalink,thumbnail_url,' +
+            'like_count,comments_count,timestamp,insights.metric(views,reach,shares,saved)',
+          limit: 50,
+        }
       });
 
-      const mediaList = response.data.data.map(item => {
-        // Ruxsat bo'lmagani uchun views, reach, shares, saved kabi maydonlarni
-        // yuborilgan aniq ma'lumotlar (likes, comments) poydevorida hisoblaymiz.
-        // Random raqamlarni butunlay olib tashladik, shunda har safar bir xil natija chiqadi.
-        const likes = item.like_count || 0;
-        const comments = item.comments_count || 0;
+      const mediaList = response.data.data.map((item) => this._mapMedia(item));
 
-        const views = (likes * 12) + (comments * 20) + (likes > 0 ? 5 : item.media_type === 'VIDEO' ? 2 : 0);
-        const reach = Math.floor(views * 0.85); // reach viewsdan biroz kam
-        const shares = Math.floor(likes * 0.05);
-        const saved = Math.floor(likes * 0.1);
-        const score = likes * 2 + comments * 3 + shares * 4 + saved * 5; // reyting balli
-
-        return {
-          id: item.id,
-          caption: item.caption,
-          type: item.media_type,
-          thumbnail: item.thumbnail_url || item.media_url,
-          url: item.permalink,
-          likes: likes,
-          comments: comments,
-          views,
-          reach,
-          shares,
-          saved,
-          score, // eng zo'r postlarni saralash uchun
-          date: new Date(item.timestamp).toLocaleDateString()
-        };
-      });
-
+      // Reyting: haqiqiy faollik bo'yicha (ko'rish ham hisobga olinadi)
       mediaList.sort((a, b) => b.score - a.score);
-
       const topPosts = mediaList.slice(0, 5);
 
-      // Bar/Pie Chart uchun umumiylashtirilgan eng zo'r postlar charti
       const chartData = {
         labels: topPosts.map(p => p.caption ? p.caption.substring(0, 15) + '...' : `Post ${p.id.substring(0, 4)}`),
         datasets: [
-          {
-            label: "Yoqtirishlar (Likes)",
-            data: topPosts.map(p => p.likes),
-            backgroundColor: "rgba(255, 99, 132, 0.6)"
-          },
-          {
-            label: "Fikrlar (Comments)",
-            data: topPosts.map(p => p.comments),
-            backgroundColor: "rgba(54, 162, 235, 0.6)"
-          },
-          {
-            label: "Ko'rishlar",
-            data: topPosts.map(p => p.views),
-            backgroundColor: "rgba(75, 192, 192, 0.6)"
-          }
+          { label: "Yoqtirishlar (Likes)", data: topPosts.map(p => p.likes) },
+          { label: "Fikrlar (Comments)", data: topPosts.map(p => p.comments) },
+          { label: "Ko'rishlar", data: topPosts.map(p => p.views || 0) },
         ]
-      }
-
-      const overallStats = {
-        totalLikes: mediaList.reduce((sum, item) => sum + item.likes, 0),
-        totalComments: mediaList.reduce((sum, item) => sum + item.comments, 0),
-        totalPosts: mediaList.length,
-        totalViews: mediaList.reduce((sum, item) => sum + item.views, 0)
-      }
-
-      return {
-        allMedia: mediaList,
-        topPosts,
-        chartData,
-        overallStats
       };
 
+      const sum = (key) => mediaList.reduce((acc, item) => acc + (item[key] || 0), 0);
+      const overallStats = {
+        totalLikes: sum('likes'),
+        totalComments: sum('comments'),
+        totalPosts: mediaList.length,
+        totalViews: sum('views'),
+        totalReach: sum('reach'),
+      };
+
+      return { allMedia: mediaList, topPosts, chartData, overallStats };
     } catch (error) {
       this._handleError('getPostsStatistics', error);
     }
+  }
+
+  /**
+   * Media yozuvini panel kutgan ko'rinishga o'tkazadi.
+   *
+   * `insights` bo'lmasligi mumkin: Instagram kam ko'rilgan media uchun
+   * statistikani bermaydi ("Not enough viewers"). Bunday holatda qiymat
+   * null bo'ladi — nol EMAS, chunki "hali ma'lum emas" bilan "nol marta
+   * ko'rilgan" bir xil narsa emas.
+   */
+  _mapMedia(item) {
+    const stats = {};
+    for (const metric of item.insights?.data || []) {
+      stats[metric.name] = metric.values?.[0]?.value ?? null;
+    }
+
+    const likes = item.like_count || 0;
+    const comments = item.comments_count || 0;
+    const views = stats.views ?? null;
+    const reach = stats.reach ?? null;
+    const shares = stats.shares ?? null;
+    const saved = stats.saved ?? null;
+
+    return {
+      id: item.id,
+      caption: item.caption || null,
+      type: item.media_type,
+      productType: item.media_product_type || null,
+      mediaUrl: item.media_url || null,
+      thumbnail: item.thumbnail_url || item.media_url || null,
+      url: item.permalink || null,
+      likes,
+      comments,
+      views,
+      reach,
+      shares,
+      saved,
+      // Saralash uchun: faollik + ko'rish. Sof son, panelga chiqmaydi.
+      score: likes * 5 + comments * 8 + (shares || 0) * 10 + (saved || 0) * 10 + (views || 0),
+      timestamp: item.timestamp,
+      date: new Date(item.timestamp).toLocaleDateString(),
+    };
   }
 
   /**
@@ -160,34 +172,14 @@ export class InstagramService {
   async getPostById(postId) {
     try {
       const response = await this.api.get(`/${postId}`, {
-        params: { fields: 'id,caption,media_type,media_url,permalink,thumbnail_url,like_count,comments_count,timestamp' }
+        params: {
+          fields:
+            'id,caption,media_type,media_product_type,media_url,permalink,thumbnail_url,' +
+            'like_count,comments_count,timestamp,insights.metric(views,reach,shares,saved)',
+        }
       });
 
-      const item = response.data;
-
-      const likes = item.like_count || 0;
-      const comments = item.comments_count || 0;
-      // Fakening a view and reach ratio based on likes and comments similar to list
-      const views = (likes * 12) + (comments * 20) + (likes > 0 ? 5 : item.media_type === 'VIDEO' ? 2 : 0);
-      const reach = Math.floor(views * 0.85);
-      const shares = Math.floor(likes * 0.05);
-      const saved = Math.floor(likes * 0.1);
-
-      return {
-        id: item.id,
-        caption: item.caption,
-        type: item.media_type,
-        mediaUrl: item.media_url,
-        thumbnail: item.thumbnail_url || item.media_url,
-        url: item.permalink,
-        likes: likes,
-        comments: comments,
-        views,
-        reach,
-        shares,
-        saved,
-        date: new Date(item.timestamp).toLocaleDateString()
-      };
+      return this._mapMedia(response.data);
     } catch (error) {
       this._handleError('getPostById', error);
     }
@@ -199,9 +191,49 @@ export class InstagramService {
   async getStories() {
     try {
       const response = await this.api.get(`/${this.businessAccountId}/stories`, {
-        params: { fields: 'id,media_url,media_type,timestamp,caption' }
+        params: { fields: 'id,media_url,media_type,thumbnail_url,timestamp,permalink,caption' }
       });
-      return response.data.data;
+
+      const stories = response.data.data || [];
+
+      /**
+       * Statistika har hikoya uchun ALOHIDA so'raladi: `stories` chekkasi
+       * ichki `insights` so'rovini qo'llamaydi.
+       *
+       * Kam ko'rilgan hikoyada Instagram (#10) "Not enough viewers"
+       * qaytaradi — bu xato emas, oddiy hol. Shuning uchun har biri
+       * alohida ushlanadi va statistika o'rniga null qo'yiladi.
+       */
+      return await Promise.all(stories.map(async (item) => {
+        const stats = await this.api
+          .get(`/${item.id}/insights`, { params: { metric: 'views,reach,replies' } })
+          .then((r) => {
+            const out = {};
+            for (const m of r.data.data || []) out[m.name] = m.values?.[0]?.value ?? null;
+            return out;
+          })
+          .catch(() => ({}));
+
+        // Hikoya 24 soat yashaydi
+        const expiresAt = new Date(new Date(item.timestamp).getTime() + 24 * 60 * 60 * 1000);
+
+        return {
+          id: item.id,
+          type: item.media_type,
+          mediaUrl: item.media_url || null,
+          thumbnail: item.thumbnail_url || item.media_url || null,
+          url: item.permalink || null,
+          caption: item.caption || null,
+          timestamp: item.timestamp,
+          expiresAt: expiresAt.toISOString(),
+          views: stats.views ?? null,
+          reach: stats.reach ?? null,
+          replies: stats.replies ?? null,
+          // Eski nomlar (panelning eski versiyasi uchun)
+          media_url: item.media_url,
+          media_type: item.media_type,
+        };
+      }));
     } catch (error) {
       this._handleError('getStories', error);
     }
