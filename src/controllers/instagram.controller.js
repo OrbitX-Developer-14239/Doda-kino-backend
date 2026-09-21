@@ -26,6 +26,11 @@ export const InstagramController = {
         res.status(200).json({ success: true, data });
     }),
 
+    deleteMedia: catchAsync(async (req, res) => {
+        const data = await instagramService.deleteMedia(req.params.id);
+        res.status(200).json({ success: true, data });
+    }),
+
     getStories: catchAsync(async (req, res) => {
         const data = await instagramService.getStories();
         res.status(200).json({ success: true, data });

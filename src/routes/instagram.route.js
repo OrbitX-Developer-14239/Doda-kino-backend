@@ -112,4 +112,22 @@ router.get("/stories", authMiddleware(["superadmin", "admin"]), InstagramControl
  */
 router.post("/stories", authMiddleware(["superadmin", "admin"]), upload.single('media'), InstagramController.uploadStory);
 
+/**
+ * @swagger
+ * /api/instagram/media/{id}:
+ *   delete:
+ *     summary: Post, Reels yoki hikoyani o'chirish (qaytarilmaydi)
+ *     tags: [Instagram]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: O'chirildi
+ */
+router.delete("/media/:id", authMiddleware(["superadmin", "admin"]), InstagramController.deleteMedia);
+
 export default router;

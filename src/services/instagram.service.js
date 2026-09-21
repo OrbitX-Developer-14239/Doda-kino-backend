@@ -242,6 +242,34 @@ export class InstagramService {
   /**
    * Hikoya yuklash (Image or Video url)
    */
+  /**
+   * Post, Reels yoki hikoyani o'chirish.
+   *
+   * Graph API (Facebook Login) buni qo'llaydi: DELETE /{ig-media-id},
+   * `instagram_manage_contents` ruxsati bilan. Karuselda faqat albomning
+   * o'zini o'chirish mumkin, ichidagi bitta rasmni emas.
+   * O'chirilgan media qaytarilmaydi.
+   */
+  async deleteMedia(mediaId) {
+    if (!/^\d+$/.test(String(mediaId))) {
+      const error = new Error("Noto'g'ri media ID");
+      error.status = 400;
+      throw error;
+    }
+    try {
+      const response = await this.api.delete(`/${mediaId}`);
+      return { deleted: response.data?.success !== false, id: String(mediaId) };
+    } catch (error) {
+      // Umumiy _handleError sababni yashiradi — o'chirishda esa admin
+      // nega o'chmaganini bilishi kerak (ruxsat, reklama posti va h.k.)
+      const meta = error.response?.data?.error;
+      console.error("❌ InstagramService.deleteMedia xatolik:", error.response?.data || error.message);
+      const err = new Error(meta?.message ? `Instagram rad etdi: ${meta.message}` : "Instagram bilan aloqa yo'q");
+      err.status = 502;
+      throw err;
+    }
+  }
+
   async uploadStory(mediaUrl, mediaType = 'IMAGE') {
     try {
       const containerRes = await this.api.post(`/${this.businessAccountId}/media`, null, {
