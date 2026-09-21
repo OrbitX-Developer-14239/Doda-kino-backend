@@ -1,4 +1,5 @@
 import axios from 'axios';
+import fs from 'fs';
 import { CONFIG } from '../config/index.js';
 
 export class InstagramService {
@@ -270,16 +271,9 @@ export class InstagramService {
     }
   }
 
-  async uploadStory(mediaUrl, mediaType = 'IMAGE') {
+  async uploadStory(mediaUrl, mediaType = 'IMAGE', filePath = null) {
     try {
-      const containerRes = await this.api.post(`/${this.businessAccountId}/media`, null, {
-        params: {
-          media_type: 'STORIES',
-          [mediaType === 'VIDEO' ? 'video_url' : 'image_url']: mediaUrl
-        }
-      });
-
-      const containerId = containerRes.data.id;
+      const containerId = await this._createContainer({ media_type: 'STORIES' }, mediaType, mediaUrl, filePath);
 
       // Agar video bo'lsa, meta serverlari ozgina vaqt oladi
       if (mediaType === 'VIDEO') {
@@ -304,20 +298,17 @@ export class InstagramService {
    * Xato bo'lsa Meta'ning aniq sababi qaytadi (format, o'lcham, davomiylik)
    * — umumiy "xatolik yuz berdi" admin uchun foydasiz.
    */
-  async uploadPost(mediaUrl, mediaType = 'IMAGE', caption = '') {
+  async uploadPost(mediaUrl, mediaType = 'IMAGE', caption = '', filePath = null) {
     try {
-      const params = mediaType === 'VIDEO'
-        ? { media_type: 'REELS', video_url: mediaUrl, share_to_feed: true }
-        : { image_url: mediaUrl };
+      const params = mediaType === 'VIDEO' ? { media_type: 'REELS', share_to_feed: true } : {};
       if (caption) params.caption = caption;
 
       // Har bosqich vaqti terminalga (pm2 logs) — sekinlik qayerdaligini ko'rish uchun
       const t0 = Date.now();
       const lap = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
 
-      const containerRes = await this.api.post(`/${this.businessAccountId}/media`, null, { params });
-      const containerId = containerRes.data.id;
-      console.log(`[Instagram] post ${mediaType}: konteyner ${lap()}`);
+      const containerId = await this._createContainer(params, mediaType, mediaUrl, filePath);
+      console.log(`[Instagram] post ${mediaType}: konteyner + fayl ${lap()}`);
 
       const polls = await this._waitUntilFinished(containerId, mediaType === 'VIDEO' ? 300000 : 60000);
       console.log(`[Instagram] post ${mediaType}: tayyor ${lap()} (${polls} tekshiruv)`);
@@ -358,6 +349,47 @@ export class InstagramService {
     } catch (error) {
       this._handleError('uploadReels', error);
     }
+  }
+
+  /**
+   * Media konteyneri yaratadi va uning id sini qaytaradi.
+   *
+   * Video (lokal fayl bo'lsa) — "resumable" usulda: fayl baytlari
+   * rupload.facebook.com ga to'g'ridan-to'g'ri yuboriladi. Ilgari Meta faylni
+   * bizning /public/uploads dan o'zi tortardi — bu navbatda 6-10 soniya
+   * kutish degani edi. Rasm uchun Meta faqat image_url qabul qiladi.
+   */
+  async _createContainer(params, mediaType, mediaUrl, filePath) {
+    if (mediaType !== 'VIDEO') {
+      const { data } = await this.api.post(`/${this.businessAccountId}/media`, null, {
+        params: { ...params, image_url: mediaUrl }
+      });
+      return data.id;
+    }
+    if (!filePath) {
+      const { data } = await this.api.post(`/${this.businessAccountId}/media`, null, {
+        params: { ...params, video_url: mediaUrl }
+      });
+      return data.id;
+    }
+
+    const { data } = await this.api.post(`/${this.businessAccountId}/media`, null, {
+      params: { ...params, upload_type: 'resumable' }
+    });
+    const { size } = await fs.promises.stat(filePath);
+    const res = await axios.post(`https://rupload.facebook.com/ig-api-upload/v25.0/${data.id}`, fs.createReadStream(filePath), {
+      headers: {
+        Authorization: `OAuth ${this.accessToken}`,
+        offset: '0',
+        file_size: String(size),
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': String(size)
+      },
+      maxBodyLength: Infinity,
+      timeout: 120_000
+    });
+    if (!res.data?.success) throw new Error(`Video Instagramga yuborilmadi: ${JSON.stringify(res.data)}`);
+    return data.id;
   }
 
   /**

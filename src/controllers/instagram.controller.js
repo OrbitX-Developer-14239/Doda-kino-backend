@@ -49,7 +49,7 @@ export const InstagramController = {
 
         try {
             // Instagramga yuborish
-            const data = await instagramService.uploadStory(fileUrl, mediaType);
+            const data = await instagramService.uploadStory(fileUrl, mediaType, req.file.path);
 
             // Yuklangandan so'ng xira bo'lmasligi yoki server to'lib ketmasligi uchun o'chirib tashlaymiz
             fs.unlink(req.file.path, (err) => {
@@ -76,7 +76,7 @@ export const InstagramController = {
         const fileUrl = `${CONFIG.SERVER_URL || `${req.protocol}://${req.get('host')}`}/public/uploads/${req.file.filename}`;
 
         try {
-            const data = await instagramService.uploadPost(fileUrl, mediaType, caption);
+            const data = await instagramService.uploadPost(fileUrl, mediaType, caption, req.file.path);
             res.status(201).json({ success: true, message: "Post joylandi!", data });
         } finally {
             // Meta faylni tortib bo'ldi (yoki rad etdi) — serverda saqlanmaydi
