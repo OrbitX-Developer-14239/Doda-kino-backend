@@ -296,6 +296,45 @@ export class InstagramService {
     }
   }
 
+  /**
+   * Yangi post joylash: rasm — oddiy post, video — Reels (lentaga ham
+   * chiqadi). Meta faylni ochiq URL dan o'zi tortadi, shuning uchun
+   * `mediaUrl` internetdan ko'rinadigan manzil bo'lishi shart.
+   *
+   * Xato bo'lsa Meta'ning aniq sababi qaytadi (format, o'lcham, davomiylik)
+   * — umumiy "xatolik yuz berdi" admin uchun foydasiz.
+   */
+  async uploadPost(mediaUrl, mediaType = 'IMAGE', caption = '') {
+    try {
+      const params = mediaType === 'VIDEO'
+        ? { media_type: 'REELS', video_url: mediaUrl, share_to_feed: true }
+        : { image_url: mediaUrl };
+      if (caption) params.caption = caption;
+
+      const containerRes = await this.api.post(`/${this.businessAccountId}/media`, null, { params });
+      const containerId = containerRes.data.id;
+
+      // Video qayta ishlanadi (bir necha soniyadan daqiqagacha); rasm tez
+      await this._waitForMediaProcessing(containerId, mediaType === 'VIDEO' ? 30 : 6, mediaType === 'VIDEO' ? 6000 : 2000);
+
+      const publishRes = await this.api.post(`/${this.businessAccountId}/media_publish`, null, {
+        params: { creation_id: containerId }
+      });
+
+      return { id: publishRes.data.id, type: mediaType === 'VIDEO' ? 'REELS' : 'IMAGE' };
+    } catch (error) {
+      const meta = error.response?.data?.error;
+      console.error("❌ InstagramService.uploadPost xatolik:", error.response?.data || error.message);
+      const err = new Error(
+        meta?.error_user_msg || meta?.message
+          ? `Instagram rad etdi: ${meta.error_user_msg || meta.message}`
+          : `Instagramga joylab bo'lmadi: ${error.message}`
+      );
+      err.status = 502;
+      throw err;
+    }
+  }
+
   async uploadReels(videoUrl, caption) {
     // Eski reels yuklash funksiyasi
     try {

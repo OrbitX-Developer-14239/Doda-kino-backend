@@ -35,7 +35,7 @@ const ALLOWED_BY_FIELD = {
 const ERROR_BY_FIELD = {
     instagramVideo: "Epizod uchun faqat video fayl (.mp4, .mov, .mkv, .webm) yuklashga ruxsat beriladi!",
     poster: "Film posteri uchun faqat rasm fayli (.jpg, .png, .webp, .gif) yuklashga ruxsat beriladi!",
-    media: "Hikoya uchun faqat rasm yoki video fayl yuklash mumkin!",
+    media: "Instagram uchun faqat rasm yoki video fayl yuklash mumkin!",
 };
 
 const storage = multer.diskStorage({

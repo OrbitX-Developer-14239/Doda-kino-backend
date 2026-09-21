@@ -130,4 +130,27 @@ router.post("/stories", authMiddleware(["superadmin", "admin"]), upload.single('
  */
 router.delete("/media/:id", authMiddleware(["superadmin", "admin"]), InstagramController.deleteMedia);
 
+/**
+ * @swagger
+ * /api/instagram/posts:
+ *   post:
+ *     summary: Yangi post joylash (rasm — post, video — Reels)
+ *     tags: [Instagram]
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               media:
+ *                 type: string
+ *                 format: binary
+ *               caption:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Post joylandi
+ */
+router.post("/posts", authMiddleware(["superadmin", "admin"]), upload.single('media'), InstagramController.uploadPost);
+
 export default router;

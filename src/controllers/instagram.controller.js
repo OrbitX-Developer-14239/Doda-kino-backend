@@ -62,5 +62,25 @@ export const InstagramController = {
             fs.unlink(req.file.path, () => { });
             throw error;
         }
+    }),
+
+    /** Yangi post: rasm — post, video — Reels. `caption` ixtiyoriy. */
+    uploadPost: catchAsync(async (req, res) => {
+        if (!req.file) {
+            throw Object.assign(new Error("Media fayl (rasm yoki video) yuborilishi shart"), { status: 400 });
+        }
+
+        // Instagram izoh chegarasi — 2200 belgi
+        const caption = String(req.body?.caption ?? "").trim().slice(0, 2200);
+        const mediaType = req.file.mimetype.startsWith('video/') ? 'VIDEO' : 'IMAGE';
+        const fileUrl = `${CONFIG.SERVER_URL || `${req.protocol}://${req.get('host')}`}/public/uploads/${req.file.filename}`;
+
+        try {
+            const data = await instagramService.uploadPost(fileUrl, mediaType, caption);
+            res.status(201).json({ success: true, message: "Post joylandi!", data });
+        } finally {
+            // Meta faylni tortib bo'ldi (yoki rad etdi) — serverda saqlanmaydi
+            fs.unlink(req.file.path, () => { });
+        }
     })
 };
