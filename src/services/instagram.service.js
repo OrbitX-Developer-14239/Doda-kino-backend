@@ -283,7 +283,7 @@ export class InstagramService {
 
       // Agar video bo'lsa, meta serverlari ozgina vaqt oladi
       if (mediaType === 'VIDEO') {
-        await this._waitForMediaProcessing(containerId, 15, 6000);
+        await this._waitUntilFinished(containerId, 180000);
       }
 
       const publishRes = await this.api.post(`/${this.businessAccountId}/media_publish`, null, {
@@ -311,15 +311,21 @@ export class InstagramService {
         : { image_url: mediaUrl };
       if (caption) params.caption = caption;
 
+      // Har bosqich vaqti terminalga (pm2 logs) — sekinlik qayerdaligini ko'rish uchun
+      const t0 = Date.now();
+      const lap = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+
       const containerRes = await this.api.post(`/${this.businessAccountId}/media`, null, { params });
       const containerId = containerRes.data.id;
+      console.log(`[Instagram] post ${mediaType}: konteyner ${lap()}`);
 
-      // Video qayta ishlanadi (bir necha soniyadan daqiqagacha); rasm tez
-      await this._waitForMediaProcessing(containerId, mediaType === 'VIDEO' ? 30 : 6, mediaType === 'VIDEO' ? 6000 : 2000);
+      const polls = await this._waitUntilFinished(containerId, mediaType === 'VIDEO' ? 300000 : 60000);
+      console.log(`[Instagram] post ${mediaType}: tayyor ${lap()} (${polls} tekshiruv)`);
 
       const publishRes = await this.api.post(`/${this.businessAccountId}/media_publish`, null, {
         params: { creation_id: containerId }
       });
+      console.log(`[Instagram] post ${mediaType}: chop etildi ${lap()}`);
 
       return { id: publishRes.data.id, type: mediaType === 'VIDEO' ? 'REELS' : 'IMAGE' };
     } catch (error) {
@@ -351,6 +357,32 @@ export class InstagramService {
       return publishResponse.data.id;
     } catch (error) {
       this._handleError('uploadReels', error);
+    }
+  }
+
+  /**
+   * Konteyner tayyor bo'lguncha kutish — tez-tez so'rab, keyin siyraklashib.
+   *
+   * Ilgari qat'iy 6 soniyada bir so'ralardi: Instagram 1-soniyada tayyor
+   * bo'lsa ham 6 soniya bekorga kutilardi. Endi 0.5s dan boshlanib 3s gacha
+   * o'sadi — tez tayyorlanganda darhol, uzoq ishlanganda esa API ni
+   * ortiqcha so'rovlar bilan to'ldirmasdan kutadi.
+   * Qaytaradi: nechta tekshiruv bo'lgani (log uchun).
+   */
+  async _waitUntilFinished(containerId, timeoutMs = 300000) {
+    const started = Date.now();
+    let delay = 500;
+    let polls = 0;
+    for (;;) {
+      polls++;
+      const { data } = await this.api.get(`/${containerId}`, { params: { fields: 'status_code,status' } });
+      if (data.status_code === 'FINISHED') return polls;
+      if (data.status_code === 'ERROR' || data.status_code === 'EXPIRED') {
+        throw new Error(`Instagram faylni qayta ishlay olmadi: ${data.status || data.status_code}`);
+      }
+      if (Date.now() - started > timeoutMs) throw new Error('Instagram faylni belgilangan vaqtda tayyorlamadi');
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(3000, Math.round(delay * 1.5));
     }
   }
 
