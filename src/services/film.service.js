@@ -50,6 +50,32 @@ async function uploadPosterToTelegram(posterLocalPath) {
 // "Qismlar" ustuni shundan o'qiydi.
 const LIST_SELECT = "name originalName year code views posterId episodesCount seasonsCount";
 
+/**
+ * Ro'yxatdagi har bir filmga uning qismlari ko'rishlari yig'indisini qo'shadi.
+ *
+ * Film hujjatidagi `views` — faqat film kartasi ochilgani. Qismlar esa o'z
+ * hisoblagichiga ega, shuning uchun admin panelda ikkala son ham ko'rinadi.
+ * Bitta guruhlash so'rovi — sahifadagi 12 ta film uchun bittagina so'rov.
+ */
+async function attachEpisodeViews(films, stores = null) {
+    if (!films?.length) return films;
+
+    const ids = films.map((f) => f._id);
+    const pipeline = [
+        { $match: { filmId: { $in: ids } } },
+        { $group: { _id: "$filmId", views: { $sum: "$views" } } }
+    ];
+
+    const groups = stores
+        ? (await Promise.all(stores.map((s) => s.Episode.aggregate(pipeline)))).flat()
+        : await EpisodeModel.aggregate(pipeline);
+
+    const byFilm = new Map(groups.map((g) => [String(g._id), g.views]));
+    for (const film of films) film.episodeViews = byFilm.get(String(film._id)) || 0;
+
+    return films;
+}
+
 export const FilmService = {
     async createFilm(body, posterLocalPath) {
         // Vaqtinchalik fayl qaysi yo'l bilan chiqmaylik o'chiriladi (orfan fayl qolmasin).
@@ -182,7 +208,11 @@ export const FilmService = {
 
         // Aralash bot: ro'yxat bir nechta bazadan yig'iladi
         const stores = mergedStores();
-        if (stores) return await mergedFilmsPaginated(stores, safePage, limit, LIST_SELECT);
+        if (stores) {
+            const result = await mergedFilmsPaginated(stores, safePage, limit, LIST_SELECT);
+            await attachEpisodeViews(result.films, stores);
+            return result;
+        }
 
         const [totalFilms, films] = await Promise.all([
             FilmModel.estimatedDocumentCount(),
@@ -195,6 +225,8 @@ export const FilmService = {
                 .limit(limit)
                 .lean()
         ]);
+
+        await attachEpisodeViews(films);
 
         const totalPages = Math.ceil(totalFilms / limit);
 
