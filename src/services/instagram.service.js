@@ -325,6 +325,17 @@ export class InstagramService {
     } catch (error) {
       const meta = error.response?.data?.error;
       console.error("❌ InstagramService.uploadPost xatolik:", error.response?.data || error.message);
+
+      // Hammuallif topilmadi / yopiq profil. Meta matni akkaunt tilida
+      // (ruscha) keladi — kod bo'yicha tanib, o'zbekcha va aniq aytamiz.
+      if (meta?.error_subcode === 2207018) {
+        const names = String(meta.error_user_msg || '').split(':').pop().trim();
+        throw Object.assign(
+          new Error(`Hammuallif qilib boʻlmaydi${names ? `: ${names}` : ''} — bunday akkaunt yoʻq, profili yopiq yoki username xato yozilgan`),
+          { status: 400 }
+        );
+      }
+
       const err = new Error(
         meta?.error_user_msg || meta?.message
           ? `Instagram rad etdi: ${meta.error_user_msg || meta.message}`
