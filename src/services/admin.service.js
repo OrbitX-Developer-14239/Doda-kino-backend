@@ -40,31 +40,52 @@ const issueTokens = (admin) => ({
 });
 
 /**
- * Bir vaqtda ochiq tura oladigan sessiyalar soni.
- * Cheklov bo'lmasa har login hujjatga bitta yozuv qo'shib boraverardi.
+ * Bitta akkauntda bir vaqtda ochiq tura oladigan sessiyalar soni.
+ *
+ * Akkauntdan bir necha kishi foydalanadi (har biri telefon va
+ * kompyuterdan). Ilgari chegara 10 edi va yangi login ENG ESKI sessiyani
+ * o'chirardi — u ko'pincha sherikning ishlab turgan paneli bo'lib chiqardi:
+ * u 15 daqiqada chiqarib yuborilar, qayta kirib endi boshqasini chiqarardi.
  */
-const MAX_SESSIONS = 10;
+const MAX_SESSIONS = 30;
 
-/** Yangi sessiyani ro'yxatga qo'shadi va eskilarini tozalaydi */
-const rememberSession = (admin, refreshToken) => {
+/**
+ * Yangi sessiyani qo'shadi.
+ *
+ * Atomik: ro'yxat o'qib-o'zgartirib-saqlanmaydi. Aks holda ikki kishi
+ * bir vaqtda kirsa, keyingi saqlash birinchisining sessiyasini ustidan
+ * yozib yuborardi.
+ *
+ * Joy tugasa eng uzoq ISHLATILMAGAN sessiya chiqadi ($sort lastUsedAt
+ * bo'yicha, $slice oxirgilarini qoldiradi). Ochiq panel har 15 daqiqada
+ * tokenini yangilagani uchun u ro'yxatning oxirida turadi.
+ */
+const addSession = async (adminId, refreshToken) => {
     const { exp } = jwt.decode(refreshToken) || {};
-    const now = Date.now();
+    const now = new Date();
 
-    const alive = (admin.refreshTokens || []).filter(
-        (s) => s.expiresAt && s.expiresAt.getTime() > now
+    // Bir update da bitta maydonni ham $pull, ham $push qilib bo'lmaydi
+    await AdminModel.updateOne(
+        { _id: adminId },
+        { $pull: { refreshTokens: { expiresAt: { $lte: now } } } }
     );
-
-    alive.push({
-        token: refreshToken,
-        createdAt: new Date(now),
-        expiresAt: exp ? new Date(exp * 1000) : new Date(now + 15 * 24 * 3600 * 1000),
-    });
-
-    // Eng yangilari qoladi
-    admin.refreshTokens = alive.slice(-MAX_SESSIONS);
-
-    // Eski maydon endi ishlatilmaydi — yangi login uni bo'shatadi
-    admin.refreshToken = null;
+    await AdminModel.updateOne(
+        { _id: adminId },
+        {
+            $push: {
+                refreshTokens: {
+                    $each: [{
+                        token: refreshToken,
+                        createdAt: now,
+                        lastUsedAt: now,
+                        expiresAt: exp ? new Date(exp * 1000) : new Date(now.getTime() + 15 * 24 * 3600 * 1000),
+                    }],
+                    $sort: { lastUsedAt: 1 },
+                    $slice: -MAX_SESSIONS,
+                },
+            },
+        }
+    );
 };
 
 const normalizeTelegramId = (value) => {
@@ -146,8 +167,7 @@ export const AdminService = {
         }
 
         const { accessToken, refreshToken } = issueTokens(admin);
-        rememberSession(admin, refreshToken);
-        await admin.save();
+        await addSession(admin._id, refreshToken);
 
         return { accessToken, refreshToken, user: { id: admin._id, username: admin.username, role: admin.role } };
     },
@@ -306,9 +326,20 @@ export const AdminService = {
         }
 
         if (normalizedContactData.authSessionToken) {
-            const { accessToken, refreshToken } = issueTokens(admin);
+            // Bu so'rov BOTDAN keladi, brauzerdan emas — shuning uchun refresh
+            // cookie ni bu yerda brauzerga qo'yib bo'lmaydi. Ilgari faqat 15
+            // daqiqalik access token yuborilardi va Telegram orqali kirgan
+            // admin 15 daqiqadan keyin chiqarib yuborilardi.
+            // Endi socket orqali BIR MARTALIK kod ketadi: panel uni darhol
+            // /admin/telegram-auth ga beradi va to'liq sessiyani (cookie bilan) oladi.
+            const loginToken = crypto.randomUUID();
+            admin.telegramLoginTokenHash = hashToken(loginToken);
+            admin.telegramLoginExpiresAt = new Date(Date.now() + 2 * 60 * 1000);
+            admin.telegramAuthSessionToken = null;
 
-            admin.refreshToken = refreshToken;
+            // Kodni almashtirishni bilmaydigan eski panel versiyasi uchun
+            const { accessToken } = issueTokens(admin);
+
             admin.telegramId = normalizedContactData.telegramId ?? admin.telegramId;
             admin.telegramUsername = normalizedContactData.telegramUsername ?? admin.telegramUsername;
             admin.firstName = normalizedContactData.firstName ?? admin.firstName;
@@ -323,6 +354,7 @@ export const AdminService = {
                 io.to(`auth_${normalizedContactData.authSessionToken}`).emit("auth_success", {
                     success: true,
                     data: {
+                        loginToken,
                         accessToken,
                         user: { id: admin._id, username: admin.username, role: admin.role }
                     }
@@ -429,8 +461,8 @@ export const AdminService = {
 
         const { accessToken, refreshToken } = issueTokens(admin);
 
-        rememberSession(admin, refreshToken);
         await admin.save();
+        await addSession(admin._id, refreshToken);
 
         // Settings sahifasidagi Telegram ulash socketini xabar berish
         if (authSessionToken) {
@@ -479,8 +511,8 @@ export const AdminService = {
         admin.telegramLoginTokenHash = hashToken(loginToken);
         admin.telegramLoginExpiresAt = expiresAt;
 
-        rememberSession(admin, refreshToken);
         await admin.save();
+        await addSession(admin._id, refreshToken);
 
         return {
             message: "Tabriklaymiz! Akauntingiz tasdiqlandi. Admin panelga o'tish uchun quyidagi tugmani bosing.",
@@ -495,16 +527,19 @@ export const AdminService = {
         if (!token) throw Object.assign(new Error("Refresh token mavjud emas"), { status: 401 });
         try {
             const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
-            const admin = await AdminModel.findById(decoded.id);
+            const admin = await AdminModel.findById(decoded.id).select("role refreshToken").lean();
 
             if (!admin) throw new Error();
 
-            // Ro'yxatdagi sessiyalardan biri; eski bitta maydon ham
-            // hali qabul qilinadi (o'zgarish chiqqanda ochiq turgan
-            // sessiyalar uzilib qolmasligi uchun)
-            const known =
-                (admin.refreshTokens || []).some((s) => s.token === token) ||
-                admin.refreshToken === token;
+            // Sessiya ro'yxatda bormi — shu bilan birga "oxirgi ishlatilgan"
+            // vaqti yangilanadi (atomik, butun ro'yxat qayta yozilmaydi)
+            const { matchedCount } = await AdminModel.updateOne(
+                { _id: admin._id, refreshTokens: { $elemMatch: { token, expiresAt: { $gt: new Date() } } } },
+                { $set: { "refreshTokens.$.lastUsedAt": new Date() } }
+            );
+
+            // Eski bitta maydon ham hali qabul qilinadi
+            const known = matchedCount > 0 || admin.refreshToken === token;
 
             if (!known) throw new Error();
 
@@ -523,18 +558,14 @@ export const AdminService = {
      * mijozlar) hammasi o'chadi.
      */
     async logout(id, token = null) {
-        const admin = await AdminModel.findById(id);
-        if (!admin) return { message: "Tizimdan chiqildi" };
-
+        // Atomik: boshqa qurilmadagi bir vaqtdagi login/refresh yozuvini o'chirib yubormaydi
         if (token) {
-            admin.refreshTokens = (admin.refreshTokens || []).filter((s) => s.token !== token);
-            if (admin.refreshToken === token) admin.refreshToken = null;
+            await AdminModel.updateOne({ _id: id }, { $pull: { refreshTokens: { token } } });
+            await AdminModel.updateOne({ _id: id, refreshToken: token }, { $set: { refreshToken: null } });
         } else {
-            admin.refreshTokens = [];
-            admin.refreshToken = null;
+            await AdminModel.updateOne({ _id: id }, { $set: { refreshTokens: [], refreshToken: null } });
         }
 
-        await admin.save();
         return { message: token ? "Tizimdan chiqildi" : "Barcha qurilmalardan chiqildi" };
     },
 

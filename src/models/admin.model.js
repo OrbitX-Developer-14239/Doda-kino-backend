@@ -30,6 +30,10 @@ const AdminSchema = new Schema({
             _id: false,
             token: { type: String, required: true },
             createdAt: { type: Date, default: Date.now },
+            // Oxirgi marta token yangilangan payt. Ochiq panel buni har
+            // 15 daqiqada yangilaydi — joy tugaganda eng uzoq ishlatilmagan
+            // sessiya chiqariladi, ishlab turgani emas.
+            lastUsedAt: { type: Date },
             expiresAt: { type: Date, required: true },
         }],
         default: [],
