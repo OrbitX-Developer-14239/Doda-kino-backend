@@ -298,10 +298,13 @@ export class InstagramService {
    * Xato bo'lsa Meta'ning aniq sababi qaytadi (format, o'lcham, davomiylik)
    * — umumiy "xatolik yuz berdi" admin uchun foydasiz.
    */
-  async uploadPost(mediaUrl, mediaType = 'IMAGE', caption = '', filePath = null) {
+  async uploadPost(mediaUrl, mediaType = 'IMAGE', caption = '', filePath = null, collaborators = []) {
     try {
       const params = mediaType === 'VIDEO' ? { media_type: 'REELS', share_to_feed: true } : {};
       if (caption) params.caption = caption;
+      // Hammualliflar (3 tagacha username). Ularga Instagram ichida taklif
+      // boradi; qabul qilmaguncha post faqat bizning profilda turadi.
+      if (collaborators.length) params.collaborators = JSON.stringify(collaborators);
 
       // Har bosqich vaqti terminalga (pm2 logs) — sekinlik qayerdaligini ko'rish uchun
       const t0 = Date.now();
@@ -330,6 +333,68 @@ export class InstagramService {
       err.status = 502;
       throw err;
     }
+  }
+
+  /**
+   * Bizni hammuallif qilib chaqirgan postlar (hali javob berilmagan).
+   * Instagram faqat post egasi, izoh va rasm havolasini beradi.
+   */
+  async getCollabInvites() {
+    try {
+      const { data } = await this.api.get(`/${this.businessAccountId}/collaboration_invites`, {
+        params: { fields: 'media_id,media_owner_username,caption,media_url', limit: 50 }
+      });
+      return (data.data || []).map((inv) => ({
+        mediaId: String(inv.media_id),
+        owner: inv.media_owner_username || null,
+        caption: inv.caption || '',
+        mediaUrl: inv.media_url || null,
+      }));
+    } catch (error) {
+      this._metaError('getCollabInvites', error, "Collab takliflarini olib bo'lmadi");
+    }
+  }
+
+  /**
+   * Taklifga javob: accept=true — post bizning profilda ham chiqadi,
+   * false — taklif rad etiladi. Ikkalasi ham qaytarib bo'lmaydi.
+   */
+  async respondCollabInvite(mediaId, accept) {
+    if (!/^\d+$/.test(String(mediaId))) {
+      throw Object.assign(new Error("Noto'g'ri media ID"), { status: 400 });
+    }
+    try {
+      const { data } = await this.api.post(`/${this.businessAccountId}/collaboration_invites`, null, {
+        params: { media_id: String(mediaId), accept: Boolean(accept) }
+      });
+      return { mediaId: String(mediaId), accepted: Boolean(accept), success: data?.success !== false };
+    } catch (error) {
+      this._metaError('respondCollabInvite', error, "Taklifga javob berib bo'lmadi");
+    }
+  }
+
+  /** Postning hammualliflari va ularning javobi (Accepted / Pending / Declined) */
+  async getCollaborators(mediaId) {
+    if (!/^\d+$/.test(String(mediaId))) {
+      throw Object.assign(new Error("Noto'g'ri media ID"), { status: 400 });
+    }
+    try {
+      const { data } = await this.api.get(`/${mediaId}/collaborators`);
+      return (data.data || []).map((c) => ({
+        username: c.username,
+        status: String(c.invite_status || '').toLowerCase() || null,
+      }));
+    } catch (error) {
+      this._metaError('getCollaborators', error, "Hammualliflarni olib bo'lmadi");
+    }
+  }
+
+  /** Meta'ning aniq sababi bilan 502 — admin nega bo'lmaganini ko'rishi kerak */
+  _metaError(methodName, error, fallback) {
+    const meta = error.response?.data?.error;
+    console.error(`❌ InstagramService.${methodName} xatolik:`, error.response?.data || error.message);
+    const message = meta?.error_user_msg || meta?.message;
+    throw Object.assign(new Error(message ? `Instagram rad etdi: ${message}` : fallback), { status: 502 });
   }
 
   async uploadReels(videoUrl, caption) {

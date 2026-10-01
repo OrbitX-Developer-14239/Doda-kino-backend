@@ -147,10 +147,69 @@ router.delete("/media/:id", authMiddleware(["superadmin", "admin"]), InstagramCo
  *                 format: binary
  *               caption:
  *                 type: string
+ *               collaborators:
+ *                 type: string
+ *                 description: 3 tagacha hammuallif username'i — "ali, vali" yoki JSON massiv
  *     responses:
  *       201:
  *         description: Post joylandi
  */
 router.post("/posts", authMiddleware(["superadmin", "admin"]), upload.single('media'), InstagramController.uploadPost);
+
+/**
+ * @swagger
+ * /api/instagram/collab-invites:
+ *   get:
+ *     summary: Bizni hammuallif qilib chaqirgan postlar (javob kutilayotgan)
+ *     tags: [Instagram]
+ *     responses:
+ *       200:
+ *         description: Takliflar ro'yxati
+ */
+router.get("/collab-invites", authMiddleware(["superadmin", "admin"]), InstagramController.getCollabInvites);
+
+/**
+ * @swagger
+ * /api/instagram/collab-invites/{mediaId}:
+ *   post:
+ *     summary: Collab taklifini qabul qilish yoki rad etish (qaytarilmaydi)
+ *     tags: [Instagram]
+ *     parameters:
+ *       - in: path
+ *         name: mediaId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               accept:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Javob yuborildi
+ */
+router.post("/collab-invites/:mediaId", authMiddleware(["superadmin", "admin"]), InstagramController.respondCollabInvite);
+
+/**
+ * @swagger
+ * /api/instagram/media/{id}/collaborators:
+ *   get:
+ *     summary: Postning hammualliflari va ularning javobi
+ *     tags: [Instagram]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Hammualliflar
+ */
+router.get("/media/:id/collaborators", authMiddleware(["superadmin", "admin"]), InstagramController.getCollaborators);
 
 export default router;
