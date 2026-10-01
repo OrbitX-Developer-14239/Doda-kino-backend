@@ -19,6 +19,11 @@ export class InstagramService {
       timeout: 20_000,
       params: { access_token: this.accessToken }
     });
+
+    // Hammuallif takliflari uchun xotira keshlari (searchAccounts)
+    this._lookupCache = new Map();
+    this._known = null;
+    this._me = null;
   }
 
   /**
@@ -398,6 +403,116 @@ export class InstagramService {
     } catch (error) {
       this._metaError('getCollaborators', error, "Hammualliflarni olib bo'lmadi");
     }
+  }
+
+  /**
+   * Hammuallif yozilayotganda takliflar.
+   *
+   * Instagram API da ism yoki username bo'yicha erkin QIDIRUV yo'q. Ikki
+   * manba birlashtiriladi:
+   *  • `exact` — aynan shu username (Business Discovery). Faqat biznes/
+   *    kreator akkauntni topadi; shaxsiy akkaunt topilmasa ham hammuallif
+   *    bo'la oladi — uni Instagram post joylanayotganda tekshiradi.
+   *  • `known` — biz bilan aloqada bo'lganlar (avvalgi hammualliflar,
+   *    taklif yuborganlar, izoh yozganlar) ichidan yozilganiga moslari.
+   */
+  async searchAccounts(query) {
+    const q = String(query || '').trim().replace(/^@+/, '').toLowerCase();
+    if (!/^[a-z0-9._]{1,30}$/.test(q)) return { query: q, exact: null, known: [] };
+
+    const [exact, known, me] = await Promise.all([
+      this._lookupAccount(q),
+      this._knownAccounts().catch(() => []),
+      this._ownUsername().catch(() => null),
+    ]);
+
+    return {
+      query: q,
+      exact: exact && exact.username !== me ? exact : null,
+      known: known
+        .filter((a) => a.username.includes(q) && a.username !== exact?.username && a.username !== me)
+        .slice(0, 6),
+    };
+  }
+
+  /** Business Discovery — 10 daqiqa xotirada (yozish paytida bir xil so'rov takrorlanmasin) */
+  async _lookupAccount(username) {
+    const cached = this._lookupCache.get(username);
+    if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.value;
+
+    let value = null;
+    try {
+      const { data } = await this.api.get(`/${this.businessAccountId}`, {
+        params: { fields: `business_discovery.username(${username}){username,name,profile_picture_url,followers_count}` }
+      });
+      const d = data.business_discovery;
+      if (d?.username) {
+        value = {
+          username: d.username.toLowerCase(),
+          name: d.name || null,
+          picture: d.profile_picture_url || null,
+          followers: d.followers_count ?? null,
+        };
+      }
+    } catch (error) {
+      // "Invalid user id" — bunday biznes/kreator akkaunt yo'q. Boshqa xatoda
+      // (token, limit) taklif shunchaki chiqmaydi — yozishga xalaqit bermaydi.
+      const meta = error.response?.data?.error;
+      if (meta?.code !== 110 && !/invalid user id/i.test(meta?.message || '')) {
+        console.error('❌ InstagramService._lookupAccount xatolik:', meta?.message || error.message);
+        return null;
+      }
+    }
+
+    if (this._lookupCache.size > 500) this._lookupCache.clear();
+    this._lookupCache.set(username, { at: Date.now(), value });
+    return value;
+  }
+
+  /**
+   * Biz bilan aloqada bo'lgan akkauntlar — 15 daqiqada bir yig'iladi
+   * (har harf uchun o'nlab API so'rovi ketmasligi uchun).
+   */
+  async _knownAccounts() {
+    if (this._known && Date.now() - this._known.at < 15 * 60 * 1000) return this._known.list;
+
+    const found = new Map(); // username -> source
+    const add = (username, source) => {
+      const u = String(username || '').toLowerCase();
+      if (u && !found.has(u)) found.set(u, source);
+    };
+
+    const { data } = await this.api.get(`/${this.businessAccountId}/media`, {
+      params: { limit: 12, fields: 'id,comments_count' }
+    });
+    const media = data.data || [];
+
+    await Promise.all([
+      // Avvalgi hammualliflar
+      ...media.map((m) => this.api.get(`/${m.id}/collaborators`)
+        .then((r) => (r.data.data || []).forEach((c) => add(c.username, 'collab')))
+        .catch(() => { })),
+      // Bizga collab taklif yuborganlar
+      this.api.get(`/${this.businessAccountId}/collaboration_invites`, { params: { fields: 'media_owner_username', limit: 50 } })
+        .then((r) => (r.data.data || []).forEach((i) => add(i.media_owner_username, 'invite')))
+        .catch(() => { }),
+      // Izoh yozganlar
+      ...media.filter((m) => m.comments_count > 0).slice(0, 8).map((m) =>
+        this.api.get(`/${m.id}/comments`, { params: { fields: 'username', limit: 50 } })
+          .then((r) => (r.data.data || []).forEach((c) => add(c.username, 'comment')))
+          .catch(() => { })),
+    ]);
+
+    const list = [...found].map(([username, source]) => ({ username, source }));
+    this._known = { at: Date.now(), list };
+    return list;
+  }
+
+  async _ownUsername() {
+    if (this._me) return this._me;
+    const { data } = await this.api.get(`/${this.businessAccountId}`, { params: { fields: 'username' } });
+    this._me = String(data.username || '').toLowerCase() || null;
+    return this._me;
   }
 
   /** Meta'ning aniq sababi bilan 502 — admin nega bo'lmaganini ko'rishi kerak */

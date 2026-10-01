@@ -132,6 +132,12 @@ export const InstagramController = {
         res.status(200).json({ success: true, data });
     }),
 
+    /** Hammuallif yozilayotganda takliflar: ?q=username */
+    searchAccounts: catchAsync(async (req, res) => {
+        const data = await instagramService.searchAccounts(req.query.q);
+        res.status(200).json({ success: true, data });
+    }),
+
     getCollaborators: catchAsync(async (req, res) => {
         const data = await instagramService.getCollaborators(req.params.id);
         res.status(200).json({ success: true, data });

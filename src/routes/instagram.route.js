@@ -212,4 +212,22 @@ router.post("/collab-invites/:mediaId", authMiddleware(["superadmin", "admin"]),
  */
 router.get("/media/:id/collaborators", authMiddleware(["superadmin", "admin"]), InstagramController.getCollaborators);
 
+/**
+ * @swagger
+ * /api/instagram/accounts/search:
+ *   get:
+ *     summary: Hammuallif yozilayotganda mos akkauntlar (aniq username + aloqada bo'lganlar)
+ *     tags: [Instagram]
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: "{ query, exact, known }"
+ */
+router.get("/accounts/search", authMiddleware(["superadmin", "admin"]), InstagramController.searchAccounts);
+
 export default router;
