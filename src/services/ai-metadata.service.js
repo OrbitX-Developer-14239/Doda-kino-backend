@@ -1,13 +1,22 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import Groq from "groq-sdk";
 import { CONFIG } from "../config/index.js";
 
-const groq = new Groq({ apiKey: CONFIG.GROQ_API_KEY });
+// Google Gemini birlamchi provayder
+const geminiApiKey = CONFIG.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
 
-const MODEL = "openai/gpt-oss-120b";
+// Barqarorlik uchun ketma-ket modellar zaxirasi (agar birortasida vaqtinchalik 503 bo'lsa, keyingisiga o'tadi)
+const GEMINI_MODELS = [
+    "gemini-3.5-flash-lite",
+    "gemini-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-3.8-flash"
+];
 
-// DIQQAT: bu model javobdan oldin "reasoning" tokenlarini sarflaydi.
-// max_tokens past bo'lsa javob BUTUNLAY bo'sh qaytadi — 1000 dan pasaytirmang.
-const MAX_TOKENS = 2500;
+// Zaxira sifatida Groq (agar Gemini umuman ishlamay qolsa)
+const groq = CONFIG.GROQ_API_KEY ? new Groq({ apiKey: CONFIG.GROQ_API_KEY }) : null;
+const GROQ_MODEL = "openai/gpt-oss-120b";
 
 const FILM_SYSTEM_PROMPT = `Sen kino ma'lumotlar bazasi uchun ishlaydigan aniq ma'lumot yig'uvchisan.
 Foydalanuvchi kino nomini beradi (ba'zan yili va davlati ham). Sen o'sha kinoni aniqlab, quyidagi JSON ni qaytarasan.
@@ -30,7 +39,7 @@ QOIDALAR:
   UMUMIY yoz — o'ylab topilgan tafsilot (voqea joyi, yili, qahramon ismlari) qo'shma.
 - "name": rasmiy o'zbekcha nomi bo'lsa o'shani yoz, bo'lmasa nomni o'zbekchaga tarjima qil.
 - "originalName": FAQAT LOTIN harflarida, kinoning xalqaro (inglizcha) nomi.
-  Kirill yoki boshqa yozuvda YOZMA. Masalan "Батальонъ" emas, "Battalion".
+  Kirill yoki boshqa yozuvda YOZMA. Masalan "Battalion".
   Xalqaro nomi bo'lmasa, asl nomini lotin transliteratsiyasida yoz.
 - "genres": FAQAT shu ro'yxatdan tanla, boshqa so'z ishlatma:
   Drama, Jangari, Komediya, Triller, Fantastika, Detektiv, Melodrama, Tarixiy,
@@ -61,8 +70,7 @@ QOIDALAR:
 - TARIXIY ANIQLIK MUHIM: davr, urush yoki sanaga ishonching bo'lmasa umuman tilga olma.`;
 
 /**
- * Groq javobini xavfsiz JSON ga aylantiradi.
- * Model ba'zan JSON ni ```json bloki ichida qaytarishi mumkin.
+ * AI javobini xavfsiz JSON ga aylantiradi.
  */
 const parseJsonReply = (raw) => {
     if (!raw) return null;
@@ -74,45 +82,71 @@ const parseJsonReply = (raw) => {
     try {
         return JSON.parse(text);
     } catch {
-        // Oxirgi urinish: matndagi birinchi { ... } blokini ajratib olamiz
         const start = text.indexOf("{");
         const end = text.lastIndexOf("}");
         if (start !== -1 && end > start) {
-            try { return JSON.parse(text.slice(start, end + 1)); } catch { /* pastda null */ }
+            try { return JSON.parse(text.slice(start, end + 1)); } catch { /* ignore */ }
         }
         return null;
     }
 };
 
+/**
+ * Asosiy so'rov funksiyasi: birinchi bo'lib Google Gemini'dan so'raydi,
+ * agar birorta modelda 503 bo'lsa keyingisiga o'tadi, oxirgi zaxira sifatida Groq ishlatiladi.
+ */
 const ask = async (systemPrompt, userPrompt) => {
-    if (!CONFIG.GROQ_API_KEY) {
-        throw Object.assign(new Error("GROQ_API_KEY sozlanmagan"), { status: 503 });
+    // 1. Google Gemini bilan urinib ko'rish
+    if (genAI) {
+        for (const modelName of GEMINI_MODELS) {
+            try {
+                const model = genAI.getGenerativeModel({
+                    model: modelName,
+                    systemInstruction: systemPrompt,
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        temperature: 0.2,
+                    },
+                });
+
+                const result = await model.generateContent(userPrompt);
+                const rawText = result.response.text();
+                const parsed = parseJsonReply(rawText);
+                if (parsed) {
+                    return parsed;
+                }
+            } catch (err) {
+                console.warn(`⚠️ [Gemini-${modelName} xatosi]: ${err.message}. Keyingi modelga o'tilmoqda...`);
+            }
+        }
     }
 
-    let completion;
-    try {
-        completion = await groq.chat.completions.create({
-            model: MODEL,
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt },
-            ],
-            max_tokens: MAX_TOKENS,
-            temperature: 0.3,
-            response_format: { type: "json_object" },
-        });
-    } catch (error) {
-        throw Object.assign(
-            new Error(`AI xizmatiga ulanib bo'lmadi: ${error.message}`),
-            { status: 502 }
-        );
+    // 2. Agar Gemini ishlamasa yoki sozlanmagan bo'lsa, zaxiradagi Groq
+    if (groq) {
+        console.warn("⚠️ [AIMetadataService]: Gemini javob bermadi, zaxiradagi Groq ishga tushirildi...");
+        try {
+            const completion = await groq.chat.completions.create({
+                model: GROQ_MODEL,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt },
+                ],
+                max_tokens: 2500,
+                temperature: 0.3,
+                response_format: { type: "json_object" },
+            });
+
+            const parsed = parseJsonReply(completion.choices?.[0]?.message?.content);
+            if (parsed) return parsed;
+        } catch (groqErr) {
+            console.error("❌ [Groq xatosi]:", groqErr.message);
+        }
     }
 
-    const parsed = parseJsonReply(completion.choices?.[0]?.message?.content);
-    if (!parsed) {
-        throw Object.assign(new Error("AI tushunarli javob qaytarmadi, qayta urinib ko'ring"), { status: 502 });
-    }
-    return parsed;
+    throw Object.assign(
+        new Error("AI xizmatidan ma'lumot olib bo'lmadi, iltimos qayta urinib ko'ring"),
+        { status: 502 }
+    );
 };
 
 const cleanString = (v, fallback = "") =>
@@ -124,10 +158,9 @@ const ALLOWED_GENRES = [
     "Ujas", "Multfilm", "Hujjatli", "Fentezi", "Sport", "Musiqiy",
 ];
 
-// Model tez-tez ruscha/inglizcha kalka qaytaradi — ularni to'g'ri janrga moslaymiz
 const GENRE_ALIASES = {
     "aksiya": "Jangari", "ekshn": "Jangari", "action": "Jangari", "boevik": "Jangari",
-    "komedия": "Komediya", "comedy": "Komediya", "thriller": "Triller",
+    "komediya": "Komediya", "comedy": "Komediya", "thriller": "Triller",
     "fantasy": "Fentezi", "sci-fi": "Fantastika", "fantastik": "Fantastika",
     "horror": "Ujas", "qo'rqinchli": "Ujas", "qorqinchli": "Ujas",
     "war": "Harbiy", "urush": "Harbiy", "history": "Tarixiy", "tarix": "Tarixiy",
@@ -154,7 +187,7 @@ const cleanGenres = (v) => {
     return out.slice(0, 4);
 };
 
-const hasCyrillic = (s) => /[Ѐ-ӿ]/.test(s);
+const hasCyrillic = (s) => /[а-яА-ЯёЁ]/.test(s);
 
 export const AIMetadataService = {
     /**
@@ -172,9 +205,6 @@ export const AIMetadataService = {
         const suggestedYear = Number(data.year);
         const currentYear = new Date().getFullYear();
 
-        // originalName AI qidiruvida moslashtirish uchun ishlatiladi — u lotin
-        // yozuvida bo'lishi kerak. Model kirillcha qaytarsa foydalanuvchi kiritgan
-        // nomga qaytamiz (u odatda lotinda yozilgan).
         let originalName = cleanString(data.originalName);
         if (!originalName || hasCyrillic(originalName)) originalName = name;
 

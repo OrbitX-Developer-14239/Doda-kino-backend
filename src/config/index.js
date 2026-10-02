@@ -108,6 +108,7 @@ export const CONFIG = {
     NODE_ENV: process.env.NODE_ENV || "development",
     PORT: process.env.PORT || 5000,
     GROQ_API_KEY: process.env.GROQ_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     MONGO_URI_MAIN: process.env.MONGO_URI_MAIN,
     BOTS: parseBots(),
     ITEMS_PER_PAGE: 12,
