@@ -6,49 +6,59 @@ import { CONFIG } from "../config/index.js";
 const geminiApiKey = CONFIG.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
 
-// Barqarorlik uchun ketma-ket modellar zaxirasi (agar birortasida vaqtinchalik 503 bo'lsa, keyingisiga o'tadi)
+// Barqarorlik va eng yuqori sifat uchun ketma-ket modellar zaxirasi:
+// 1. gemini-3.8-flash — eng kuchli, eng yangi model
+// 2. gemini-2.5-flash — barqaror va tezkor zaxira
+// 3. gemini-3.5-flash-lite — yengil zaxira modeli
 const GEMINI_MODELS = [
-    "gemini-3.5-flash-lite",
-    "gemini-flash-latest",
+    "gemini-3.8-flash",
     "gemini-2.5-flash",
-    "gemini-3.8-flash"
+    "gemini-3.5-flash-lite"
 ];
 
 // Zaxira sifatida Groq (agar Gemini umuman ishlamay qolsa)
 const groq = CONFIG.GROQ_API_KEY ? new Groq({ apiKey: CONFIG.GROQ_API_KEY }) : null;
 const GROQ_MODEL = "openai/gpt-oss-120b";
 
-const FILM_SYSTEM_PROMPT = `Sen kino ma'lumotlar bazasi uchun ishlaydigan aniq ma'lumot yig'uvchisan.
-Foydalanuvchi kino nomini beradi (ba'zan yili va davlati ham). Sen o'sha kinoni aniqlab, quyidagi JSON ni qaytarasan.
+const FILM_SYSTEM_PROMPT = `Sen kino va seriallar ma'lumotlar bazasi bo'yicha ekspertisan.
+Foydalanuvchi kino yoki serial nomini O'ZBEK TILIDA (yoki rus/ingliz) yozadi.
 
-FAQAT JSON qaytar, boshqa hech qanday matn yozma. Struktura:
+Sening asosiy vazifang:
+1. O'zbekcha tarjima qilingan film nomini tahlil qilib, uning ASLIY XALQARO (inglizcha yoki original) nomini aniqlash.
+Masalan:
+- "Tinch okeani daxshatlari" -> Asl nomi: "Pacific Rim" (2013)
+- "Javohir politsiyachi" -> Asl nomi: "Blue Streak" (1999)
+- "Qasoskorlar" -> Asl nomi: "The Avengers" (2012)
+- "Yulduzlararo" -> Asl nomi: "Interstellar" (2014)
+- "Forsaj" yoki "Tezkor va g'azablangan" -> Asl nomi: "The Fast and the Furious"
+- "Garri Potter" -> Asl nomi: "Harry Potter"
+- "Qora ritsar" -> Asl nomi: "The Dark Knight"
+- "Titanik" -> Asl nomi: "Titanic"
+- "Boshlanish" -> Asl nomi: "Inception"
+- "Taxtlar o'yini" -> Asl nomi: "Game of Thrones"
+
+2. Foydalanuvchi bergan nomga qarab, agar u jahon kinosidagi yoki o'zbek/rus/turk filmi bo'lsa, uning to'liq ma'lumotlarini topib berasan.
+3. Agar film haqiqatdan mavjud bo'lsa va uni aniqlagan bo'lsang, DOIMO "found": true qo'y! O'zbekcha nomini bilganingdan keyin hech qachon shubhalanib "found": false qo'yma! Faqat film umuman mavjud bo'lmasa "found": false qil.
+
+FAQAT JSON formatda qaytar, boshqa hech qanday matn yozma.
+Struktura:
 {
-  "found": true/false,
-  "name": "kinoning O'ZBEKCHA nomi",
-  "originalName": "kinoning xalqaro/inglizcha nomi",
-  "year": 2015,
-  "country": "davlat nomi o'zbekcha (masalan: Rossiya, AQSH, Janubiy Koreya, Buyuk Britaniya)",
+  "found": true,
+  "name": "kinoning O'ZBEKCHA nomi (masalan: Tinch okeani daxshatlari)",
+  "originalName": "kinoning xalqaro/inglizcha nomi (faqat LOTIN harflarida, masalan: Pacific Rim)",
+  "year": 2013,
+  "country": "davlat nomi o'zbekcha (masalan: Rossiya, AQSH, Janubiy Koreya, Buyuk Britaniya, Fransiya)",
   "genres": ["janr1", "janr2"],
-  "description": "o'zbekcha tavsif"
+  "description": "o'zbekcha tavsif (3-5 ta to'liq gap, syujetni qiziqarli tushuntir, spoiler bermasdan)"
 }
 
 QOIDALAR:
-- "found": kinoni ANIQ bilsang true. Syujeti, davri yoki qahramonlari haqida shubhang
-  bo'lsa false qo'y — noto'g'ri ma'lumot yozgandan ko'ra "bilmayman" degan yaxshi.
-- found=false bo'lsa ham qolgan maydonlarni bilganingcha to'ldir, lekin tavsifni
-  UMUMIY yoz — o'ylab topilgan tafsilot (voqea joyi, yili, qahramon ismlari) qo'shma.
-- "name": rasmiy o'zbekcha nomi bo'lsa o'shani yoz, bo'lmasa nomni o'zbekchaga tarjima qil.
-- "originalName": FAQAT LOTIN harflarida, kinoning xalqaro (inglizcha) nomi.
-  Kirill yoki boshqa yozuvda YOZMA. Masalan "Battalion".
-  Xalqaro nomi bo'lmasa, asl nomini lotin transliteratsiyasida yoz.
-- "genres": FAQAT shu ro'yxatdan tanla, boshqa so'z ishlatma:
+- "originalName": FAQAT LOTIN harflarida, kinoning xalqaro (inglizcha) nomi. Kirill yoki boshqa yozuvda YOZMA.
+- "genres": FAQAT shu ro'yxatdan tanla (2 tadan 4 tagacha):
   Drama, Jangari, Komediya, Triller, Fantastika, Detektiv, Melodrama, Tarixiy,
   Biografiya, Harbiy, Kriminal, Sarguzasht, Ujas, Multfilm, Hujjatli, Fentezi, Sport, Musiqiy.
-  2 tadan 4 tagacha yoz. ("Aksiya", "Ekshn", "Action" kabi so'zlar TAQIQLANGAN — o'rniga "Jangari")
-- "description": O'ZBEK TILIDA, 3-5 ta to'liq gap, kamida 200 belgi. Ravon matn bo'lsin.
-  Syujetni tushuntir, lekin oxirini oshkor qilma.
-  TARIXIY ANIQLIK MUHIM: urush, davr va sana haqida yozayotganda aniq bo'l.
-  Qaysi urush yoki yil ekaniga ishonching bo'lmasa, umuman tilga olma.
+  ("Aksiya", "Ekshn", "Action" kabi so'zlar o'rniga DOIMO "Jangari" ishlat)
+- "description": O'ZBEK TILIDA, 3-5 ta to'liq gap, kamida 150 belgi. Ravon va qiziqarli matn bo'lsin.
 - "year": faqat raqam (birinchi chiqarilgan yili).
 - Foydalanuvchi yil yoki davlat bergan bo'lsa, aynan o'sha kinoni nazarda tutayotganini hisobga ol.`;
 
@@ -57,7 +67,7 @@ Foydalanuvchi serial yoki kino nomini va qism raqamini beradi.
 
 FAQAT JSON qaytar:
 {
-  "found": true/false,
+  "found": true,
   "name": "qism nomi (o'zbekcha)",
   "description": "qism haqida o'zbekcha tavsif"
 }
@@ -65,9 +75,7 @@ FAQAT JSON qaytar:
 QOIDALAR:
 - Qismning aniq nomini bilsang o'shani yoz. Bilmasang "N-qism" ko'rinishida yoz va found=false qil.
 - "description": o'zbekcha, 2-4 gap, kamida 100 belgi. Spoiler yozma.
-- found=false bo'lsa tavsifni UMUMIY yoz — o'ylab topilgan tafsilot (voqea joyi, sana,
-  qahramon ismlari, qaysi urush) QO'SHMA. Bilmagan narsangni yozgandan ko'ra yozmagan yaxshi.
-- TARIXIY ANIQLIK MUHIM: davr, urush yoki sanaga ishonching bo'lmasa umuman tilga olma.`;
+- found=false bo'lsa tavsifni UMUMIY yoz — o'ylab topilgan tafsilot QO'SHMA.`;
 
 /**
  * AI javobini xavfsiz JSON ga aylantiradi.
@@ -187,7 +195,7 @@ const cleanGenres = (v) => {
     return out.slice(0, 4);
 };
 
-const hasCyrillic = (s) => /[а-яА-ЯёЁ]/.test(s);
+const hasCyrillic = (s) => /[\u0400-\u04FF]/.test(s);
 
 export const AIMetadataService = {
     /**
