@@ -89,26 +89,34 @@ export class InstagramService {
   /**
    * Eng yaxshi va hamma postlarni reytingi hamda statistikasi
    */
-  async getPostsStatistics() {
+  async getPostsStatistics(options = {}) {
     const target = this._resolveTarget();
-    if (target !== this) return target.getPostsStatistics();
+    if (target !== this) return target.getPostsStatistics(options);
 
     try {
-      const response = await this.api.get(`/${this.businessAccountId}/media`, {
-        params: {
-          fields:
-            'id,caption,media_type,media_product_type,media_url,permalink,thumbnail_url,' +
-            'like_count,comments_count,timestamp,insights.metric(views,reach,shares,saved)',
-          limit: 50,
-        }
-      });
+      const limit = Math.min(Math.max(Number(options.limit) || 30, 1), 50);
+      const params = {
+        fields:
+          'id,caption,media_type,media_product_type,media_url,permalink,thumbnail_url,' +
+          'like_count,comments_count,timestamp,insights.metric(views,reach,shares,saved)',
+        limit,
+      };
+      if (options.after) {
+        params.after = options.after;
+      }
 
-      const mediaList = (response.data.data || []).map((item) => this._mapMedia(item));
+      const response = await this.api.get(`/${this.businessAccountId}/media`, { params });
+      const rawData = response.data?.data || [];
+      const mediaList = rawData.map((item) => this._mapMedia(item));
 
-      // Reyting: haqiqiy faollik bo'yicha (ko'rish ham hisobga olinadi)
-      mediaList.sort((a, b) => b.score - a.score);
-      const topPosts = mediaList.slice(0, 5);
+      // Tartibi: Instagramdagi kabi bo'lsin — eng oxirgi qo'yilgani boshida tursin
+      mediaList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+      const nextCursor = response.data?.paging?.cursors?.after || null;
+      const hasMore = Boolean(response.data?.paging?.next);
+
+      // Reyting va chart
+      const topPosts = [...mediaList].sort((a, b) => b.score - a.score).slice(0, 5);
       const chartData = {
         labels: topPosts.map(p => p.caption ? p.caption.substring(0, 15) + '...' : `Post ${p.id.substring(0, 4)}`),
         datasets: [
@@ -127,7 +135,7 @@ export class InstagramService {
         totalReach: sum('reach'),
       };
 
-      return { allMedia: mediaList, topPosts, chartData, overallStats };
+      return { allMedia: mediaList, nextCursor, hasMore, topPosts, chartData, overallStats };
     } catch (error) {
       this._handleError('getPostsStatistics', error);
     }
@@ -318,23 +326,51 @@ export class InstagramService {
 
     try {
       const { data } = await this.api.get(`/${this.businessAccountId}/collaboration_invites`, {
-        params: {
-          fields: 'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,media_owner_username',
-          limit: 50,
-        }
+        params: { limit: 20 }
       });
-      return (data.data || []).map((item) => ({
-        id: item.id,
-        caption: item.caption || null,
-        type: item.media_type,
-        productType: item.media_product_type || null,
-        mediaUrl: item.media_url || null,
-        thumbnail: item.thumbnail_url || item.media_url || null,
-        url: item.permalink || null,
-        timestamp: item.timestamp,
-        date: new Date(item.timestamp).toLocaleDateString(),
-        ownerUsername: item.media_owner_username || null,
-      }));
+      const rawList = data?.data || [];
+
+      // Har bir taklifni media ma'lumoti va foydalanuvchi avatari bilan boyitamiz
+      const invites = await Promise.all(
+        rawList.map(async (item) => {
+          const mediaId = item.media_id || item.id;
+          const owner = item.media_owner_username || null;
+          let postData = null;
+          let userData = null;
+
+          try {
+            const [postRes, userRes] = await Promise.allSettled([
+              mediaId
+                ? this.api.get(`/${mediaId}`, {
+                    params: { fields: 'id,timestamp,caption,thumbnail_url,media_url,media_type,permalink' }
+                  })
+                : null,
+              owner ? this._lookupAccount(owner) : null,
+            ]);
+            if (postRes.status === 'fulfilled') postData = postRes.value?.data;
+            if (userRes.status === 'fulfilled') userData = userRes.value;
+          } catch (_) {}
+
+          const timestamp = postData?.timestamp || null;
+
+          return {
+            id: mediaId,
+            mediaId: mediaId,
+            owner: owner,
+            ownerName: userData?.name || null,
+            ownerAvatar: userData?.picture || null,
+            caption: postData?.caption || item.caption || null,
+            thumbnail: postData?.thumbnail_url || (postData?.media_type !== 'VIDEO' ? postData?.media_url : null) || null,
+            mediaUrl: postData?.media_url || item.media_url || null,
+            type: postData?.media_type || (item.media_url?.includes('.mp4') ? 'VIDEO' : 'IMAGE'),
+            permalink: postData?.permalink || null,
+            timestamp,
+            date: timestamp ? new Date(timestamp).toLocaleDateString() : null,
+          };
+        })
+      );
+
+      return invites;
     } catch (error) {
       this._handleError('getCollabInvites', error);
     }

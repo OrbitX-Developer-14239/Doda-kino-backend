@@ -48,7 +48,8 @@ export const InstagramController = {
     }),
 
     getPostStats: catchAsync(async (req, res) => {
-        const data = await instagramService.getPostsStatistics();
+        const { limit, after } = req.query;
+        const data = await instagramService.getPostsStatistics({ limit, after });
         res.status(200).json({ success: true, data });
     }),
 
