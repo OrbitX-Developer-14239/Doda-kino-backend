@@ -101,6 +101,7 @@ const baseTenant = (botCfg) => ({
     api: new Api(botCfg.token),
     active: false,
     username: null,
+    instagram: botCfg.instagram || null,
 });
 
 /** Oddiy bot: o'z film bazasi bor */

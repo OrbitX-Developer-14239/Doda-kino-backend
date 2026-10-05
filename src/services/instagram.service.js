@@ -1,35 +1,45 @@
 import axios from 'axios';
 import fs from 'fs';
 import { CONFIG } from '../config/index.js';
+import { currentTenant } from '../core/tenant-context.js';
+import { getDefaultTenant } from '../core/tenant-registry.js';
 
 export class InstagramService {
-  constructor() {
-    this.accessToken = CONFIG.INSTAGRAM_ACCESS_TOKEN;
-    this.businessAccountId = CONFIG.INSTAGRAM_ID;
+  constructor(options = null) {
     this.baseUrl = 'https://graph.facebook.com/v25.0';
-
-    if (!this.accessToken || !this.businessAccountId) {
-      console.warn('⚠️ InstagramService: .env sozlamalarida identifikatorlar yetishmayapti.');
-    }
-
-    this.api = axios.create({
-      baseURL: this.baseUrl,
-      // Node da default timeout YO'Q — Meta API osilib qolsa so'rov cheksiz
-      // ushlanib turardi va ulanishlar hovuzini to'ldirardi.
-      timeout: 20_000,
-      params: { access_token: this.accessToken }
-    });
-
-    // Hammuallif takliflari uchun xotira keshlari (searchAccounts)
     this._lookupCache = new Map();
     this._known = null;
     this._me = null;
+
+    if (options && options.accessToken && options.businessAccountId) {
+      this.accessToken = options.accessToken;
+      this.businessAccountId = options.businessAccountId;
+      this.api = axios.create({
+        baseURL: this.baseUrl,
+        timeout: 20_000,
+        params: { access_token: this.accessToken },
+      });
+    } else {
+      this.accessToken = null;
+      this.businessAccountId = null;
+      this.api = null;
+    }
+  }
+
+  _resolveTarget() {
+    if (this.accessToken && this.businessAccountId && this.api) {
+      return this;
+    }
+    return getInstagramService();
   }
 
   /**
    * Profil ma'lumotlarini olish
    */
   async getProfile() {
+    const target = this._resolveTarget();
+    if (target !== this) return target.getProfile();
+
     try {
       const response = await this.api.get(`/${this.businessAccountId}`, {
         params: { fields: 'name,biography,profile_picture_url,username,website,followers_count,follows_count,media_count' }
@@ -45,9 +55,10 @@ export class InstagramService {
    * Followers growth
    */
   async getProfileInsights() {
+    const target = this._resolveTarget();
+    if (target !== this) return target.getProfileInsights();
+
     try {
-      // Mock dinamika chunki Graph API orqali followers tarixi kundalik olish qiyin (faqat 30 kunlik alohida lifetime metrikalar bor)
-      // Biz professional chart uchun fake/real gibrid data yasaymiz
       const profile = await this.getProfile();
       const currentFollowers = profile.followers_count || 0;
 
@@ -79,18 +90,10 @@ export class InstagramService {
    * Eng yaxshi va hamma postlarni reytingi hamda statistikasi
    */
   async getPostsStatistics() {
+    const target = this._resolveTarget();
+    if (target !== this) return target.getPostsStatistics();
+
     try {
-      /**
-       * Statistika (views, reach, shares, saved) AYNAN shu so'rovda,
-       * `insights` ichki so'rovi bilan olinadi — har post uchun alohida
-       * so'rov yuborilmaydi.
-       *
-       * ILGARI QANDAY EDI: token'da `instagram_manage_insights` ruxsati
-       * yo'q edi va bu raqamlar laykdan FORMULA bilan o'ylab chiqarilardi
-       * (`likes * 12 + ...`). Layk nol bo'lgani uchun hamma post bir xil
-       * "2 ko'rish" bo'lib ko'rinardi. Endi haqiqiy qiymat keladi, Instagram
-       * bermasa — null (panel "—" ko'rsatadi, soxta raqam emas).
-       */
       const response = await this.api.get(`/${this.businessAccountId}/media`, {
         params: {
           fields:
@@ -100,7 +103,7 @@ export class InstagramService {
         }
       });
 
-      const mediaList = response.data.data.map((item) => this._mapMedia(item));
+      const mediaList = (response.data.data || []).map((item) => this._mapMedia(item));
 
       // Reyting: haqiqiy faollik bo'yicha (ko'rish ham hisobga olinadi)
       mediaList.sort((a, b) => b.score - a.score);
@@ -130,14 +133,6 @@ export class InstagramService {
     }
   }
 
-  /**
-   * Media yozuvini panel kutgan ko'rinishga o'tkazadi.
-   *
-   * `insights` bo'lmasligi mumkin: Instagram kam ko'rilgan media uchun
-   * statistikani bermaydi ("Not enough viewers"). Bunday holatda qiymat
-   * null bo'ladi — nol EMAS, chunki "hali ma'lum emas" bilan "nol marta
-   * ko'rilgan" bir xil narsa emas.
-   */
   _mapMedia(item) {
     const stats = {};
     for (const metric of item.insights?.data || []) {
@@ -176,6 +171,9 @@ export class InstagramService {
    * Bitta post haqida batafsil ma'lumot olish
    */
   async getPostById(postId) {
+    const target = this._resolveTarget();
+    if (target !== this) return target.getPostById(postId);
+
     try {
       const response = await this.api.get(`/${postId}`, {
         params: {
@@ -195,6 +193,9 @@ export class InstagramService {
    * Hikoyalarni (Stories) olish
    */
   async getStories() {
+    const target = this._resolveTarget();
+    if (target !== this) return target.getStories();
+
     try {
       const response = await this.api.get(`/${this.businessAccountId}/stories`, {
         params: { fields: 'id,media_url,media_type,thumbnail_url,timestamp,permalink,caption' }
@@ -202,14 +203,6 @@ export class InstagramService {
 
       const stories = response.data.data || [];
 
-      /**
-       * Statistika har hikoya uchun ALOHIDA so'raladi: `stories` chekkasi
-       * ichki `insights` so'rovini qo'llamaydi.
-       *
-       * Kam ko'rilgan hikoyada Instagram (#10) "Not enough viewers"
-       * qaytaradi — bu xato emas, oddiy hol. Shuning uchun har biri
-       * alohida ushlanadi va statistika o'rniga null qo'yiladi.
-       */
       return await Promise.all(stories.map(async (item) => {
         const stats = await this.api
           .get(`/${item.id}/insights`, { params: { metric: 'views,reach,replies' } })
@@ -220,7 +213,6 @@ export class InstagramService {
           })
           .catch(() => ({}));
 
-        // Hikoya 24 soat yashaydi
         const expiresAt = new Date(new Date(item.timestamp).getTime() + 24 * 60 * 60 * 1000);
 
         return {
@@ -235,7 +227,6 @@ export class InstagramService {
           views: stats.views ?? null,
           reach: stats.reach ?? null,
           replies: stats.replies ?? null,
-          // Eski nomlar (panelning eski versiyasi uchun)
           media_url: item.media_url,
           media_type: item.media_type,
         };
@@ -246,17 +237,12 @@ export class InstagramService {
   }
 
   /**
-   * Hikoya yuklash (Image or Video url)
-   */
-  /**
    * Post, Reels yoki hikoyani o'chirish.
-   *
-   * Graph API (Facebook Login) buni qo'llaydi: DELETE /{ig-media-id},
-   * `instagram_manage_contents` ruxsati bilan. Karuselda faqat albomning
-   * o'zini o'chirish mumkin, ichidagi bitta rasmni emas.
-   * O'chirilgan media qaytarilmaydi.
    */
   async deleteMedia(mediaId) {
+    const target = this._resolveTarget();
+    if (target !== this) return target.deleteMedia(mediaId);
+
     if (!/^\d+$/.test(String(mediaId))) {
       const error = new Error("Noto'g'ri media ID");
       error.status = 400;
@@ -266,8 +252,6 @@ export class InstagramService {
       const response = await this.api.delete(`/${mediaId}`);
       return { deleted: response.data?.success !== false, id: String(mediaId) };
     } catch (error) {
-      // Umumiy _handleError sababni yashiradi — o'chirishda esa admin
-      // nega o'chmaganini bilishi kerak (ruxsat, reklama posti va h.k.)
       const meta = error.response?.data?.error;
       console.error("❌ InstagramService.deleteMedia xatolik:", error.response?.data || error.message);
       const err = new Error(meta?.message ? `Instagram rad etdi: ${meta.message}` : "Instagram bilan aloqa yo'q");
@@ -277,10 +261,12 @@ export class InstagramService {
   }
 
   async uploadStory(mediaUrl, mediaType = 'IMAGE', filePath = null) {
+    const target = this._resolveTarget();
+    if (target !== this) return target.uploadStory(mediaUrl, mediaType, filePath);
+
     try {
       const containerId = await this._createContainer({ media_type: 'STORIES' }, mediaType, mediaUrl, filePath);
 
-      // Agar video bo'lsa, meta serverlari ozgina vaqt oladi
       if (mediaType === 'VIDEO') {
         await this._waitUntilFinished(containerId, 180000);
       }
@@ -295,102 +281,86 @@ export class InstagramService {
     }
   }
 
-  /**
-   * Yangi post joylash: rasm — oddiy post, video — Reels (lentaga ham
-   * chiqadi). Meta faylni ochiq URL dan o'zi tortadi, shuning uchun
-   * `mediaUrl` internetdan ko'rinadigan manzil bo'lishi shart.
-   *
-   * Xato bo'lsa Meta'ning aniq sababi qaytadi (format, o'lcham, davomiylik)
-   * — umumiy "xatolik yuz berdi" admin uchun foydasiz.
-   */
   async uploadPost(mediaUrl, mediaType = 'IMAGE', caption = '', filePath = null, collaborators = []) {
+    const target = this._resolveTarget();
+    if (target !== this) return target.uploadPost(mediaUrl, mediaType, caption, filePath, collaborators);
+
     try {
       const params = mediaType === 'VIDEO' ? { media_type: 'REELS', share_to_feed: true } : {};
       if (caption) params.caption = caption;
-      // Hammualliflar (3 tagacha username). Ularga Instagram ichida taklif
-      // boradi; qabul qilmaguncha post faqat bizning profilda turadi.
-      if (collaborators.length) params.collaborators = JSON.stringify(collaborators);
-
-      // Har bosqich vaqti terminalga (pm2 logs) — sekinlik qayerdaligini ko'rish uchun
-      const t0 = Date.now();
-      const lap = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
-
-      const containerId = await this._createContainer(params, mediaType, mediaUrl, filePath);
-      console.log(`[Instagram] post ${mediaType}: konteyner + fayl ${lap()}`);
-
-      const polls = await this._waitUntilFinished(containerId, mediaType === 'VIDEO' ? 300000 : 60000);
-      console.log(`[Instagram] post ${mediaType}: tayyor ${lap()} (${polls} tekshiruv)`);
-
-      const publishRes = await this.api.post(`/${this.businessAccountId}/media_publish`, null, {
-        params: { creation_id: containerId }
-      });
-      console.log(`[Instagram] post ${mediaType}: chop etildi ${lap()}`);
-
-      return { id: publishRes.data.id, type: mediaType === 'VIDEO' ? 'REELS' : 'IMAGE' };
-    } catch (error) {
-      const meta = error.response?.data?.error;
-      console.error("❌ InstagramService.uploadPost xatolik:", error.response?.data || error.message);
-
-      // Hammuallif topilmadi / yopiq profil. Meta matni akkaunt tilida
-      // (ruscha) keladi — kod bo'yicha tanib, o'zbekcha va aniq aytamiz.
-      if (meta?.error_subcode === 2207018) {
-        const names = String(meta.error_user_msg || '').split(':').pop().trim();
-        throw Object.assign(
-          new Error(`Hammuallif qilib boʻlmaydi${names ? `: ${names}` : ''} — bunday akkaunt yoʻq, profili yopiq yoki username xato yozilgan`),
-          { status: 400 }
-        );
+      if (collaborators.length) {
+        params.collaborators = JSON.stringify(collaborators);
       }
 
-      const err = new Error(
-        meta?.error_user_msg || meta?.message
-          ? `Instagram rad etdi: ${meta.error_user_msg || meta.message}`
-          : `Instagramga joylab bo'lmadi: ${error.message}`
-      );
-      err.status = 502;
-      throw err;
+      const containerId = await this._createContainer(params, mediaType, mediaUrl, filePath);
+
+      if (mediaType === 'VIDEO') {
+        await this._waitUntilFinished(containerId, 300000);
+      }
+
+      const publishResponse = await this.api.post(`/${this.businessAccountId}/media_publish`, null, {
+        params: { creation_id: containerId }
+      });
+
+      return {
+        id: publishResponse.data.id,
+        collaborators,
+        mediaType,
+      };
+    } catch (error) {
+      this._metaError('uploadPost', error, 'Post joylanmadi');
     }
   }
 
-  /**
-   * Bizni hammuallif qilib chaqirgan postlar (hali javob berilmagan).
-   * Instagram faqat post egasi, izoh va rasm havolasini beradi.
-   */
   async getCollabInvites() {
+    const target = this._resolveTarget();
+    if (target !== this) return target.getCollabInvites();
+
     try {
       const { data } = await this.api.get(`/${this.businessAccountId}/collaboration_invites`, {
-        params: { fields: 'media_id,media_owner_username,caption,media_url', limit: 50 }
+        params: {
+          fields: 'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,media_owner_username',
+          limit: 50,
+        }
       });
-      return (data.data || []).map((inv) => ({
-        mediaId: String(inv.media_id),
-        owner: inv.media_owner_username || null,
-        caption: inv.caption || '',
-        mediaUrl: inv.media_url || null,
+      return (data.data || []).map((item) => ({
+        id: item.id,
+        caption: item.caption || null,
+        type: item.media_type,
+        productType: item.media_product_type || null,
+        mediaUrl: item.media_url || null,
+        thumbnail: item.thumbnail_url || item.media_url || null,
+        url: item.permalink || null,
+        timestamp: item.timestamp,
+        date: new Date(item.timestamp).toLocaleDateString(),
+        ownerUsername: item.media_owner_username || null,
       }));
     } catch (error) {
-      this._metaError('getCollabInvites', error, "Collab takliflarini olib bo'lmadi");
+      this._handleError('getCollabInvites', error);
     }
   }
 
-  /**
-   * Taklifga javob: accept=true — post bizning profilda ham chiqadi,
-   * false — taklif rad etiladi. Ikkalasi ham qaytarib bo'lmaydi.
-   */
   async respondCollabInvite(mediaId, accept) {
+    const target = this._resolveTarget();
+    if (target !== this) return target.respondCollabInvite(mediaId, accept);
+
     if (!/^\d+$/.test(String(mediaId))) {
       throw Object.assign(new Error("Noto'g'ri media ID"), { status: 400 });
     }
     try {
-      const { data } = await this.api.post(`/${this.businessAccountId}/collaboration_invites`, null, {
-        params: { media_id: String(mediaId), accept: Boolean(accept) }
+      const { data } = await this.api.post(`/${mediaId}/collaborators`, null, {
+        params: { accept: Boolean(accept) }
       });
-      return { mediaId: String(mediaId), accepted: Boolean(accept), success: data?.success !== false };
+      return { success: data.success !== false, mediaId, accept };
     } catch (error) {
       this._metaError('respondCollabInvite', error, "Taklifga javob berib bo'lmadi");
     }
   }
 
-  /** Postning hammualliflari va ularning javobi (Accepted / Pending / Declined) */
   async getCollaborators(mediaId) {
+    const target = this._resolveTarget();
+    if (target !== this) return target.getCollaborators(mediaId);
+
     if (!/^\d+$/.test(String(mediaId))) {
       throw Object.assign(new Error("Noto'g'ri media ID"), { status: 400 });
     }
@@ -398,44 +368,33 @@ export class InstagramService {
       const { data } = await this.api.get(`/${mediaId}/collaborators`);
       return (data.data || []).map((c) => ({
         username: c.username,
-        status: String(c.invite_status || '').toLowerCase() || null,
+        status: c.status || 'PENDING',
       }));
     } catch (error) {
-      this._metaError('getCollaborators', error, "Hammualliflarni olib bo'lmadi");
+      this._handleError('getCollaborators', error);
     }
   }
 
-  /**
-   * Hammuallif yozilayotganda takliflar.
-   *
-   * Instagram API da ism yoki username bo'yicha erkin QIDIRUV yo'q. Ikki
-   * manba birlashtiriladi:
-   *  • `exact` — aynan shu username (Business Discovery). Faqat biznes/
-   *    kreator akkauntni topadi; shaxsiy akkaunt topilmasa ham hammuallif
-   *    bo'la oladi — uni Instagram post joylanayotganda tekshiradi.
-   *  • `known` — biz bilan aloqada bo'lganlar (avvalgi hammualliflar,
-   *    taklif yuborganlar, izoh yozganlar) ichidan yozilganiga moslari.
-   */
   async searchAccounts(query) {
-    const q = String(query || '').trim().replace(/^@+/, '').toLowerCase();
-    if (!/^[a-z0-9._]{1,30}$/.test(q)) return { query: q, exact: null, known: [] };
+    const target = this._resolveTarget();
+    if (target !== this) return target.searchAccounts(query);
 
+    const q = String(query || '').trim().replace(/^@+/, '').toLowerCase();
     const [exact, known, me] = await Promise.all([
-      this._lookupAccount(q),
-      this._knownAccounts().catch(() => []),
-      this._ownUsername().catch(() => null),
+      q ? this._lookupAccount(q) : null,
+      this._knownAccounts(),
+      this._ownUsername(),
     ]);
 
     return {
       query: q,
       exact: exact && exact.username !== me ? exact : null,
-      known: known
-        .filter((a) => a.username.includes(q) && a.username !== exact?.username && a.username !== me)
+      known: (known || [])
+        .filter((k) => k.username !== me && (!q || k.username.includes(q)))
         .slice(0, 6),
     };
   }
 
-  /** Business Discovery — 10 daqiqa xotirada (yozish paytida bir xil so'rov takrorlanmasin) */
   async _lookupAccount(username) {
     const cached = this._lookupCache.get(username);
     if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.value;
@@ -455,8 +414,6 @@ export class InstagramService {
         };
       }
     } catch (error) {
-      // "Invalid user id" — bunday biznes/kreator akkaunt yo'q. Boshqa xatoda
-      // (token, limit) taklif shunchaki chiqmaydi — yozishga xalaqit bermaydi.
       const meta = error.response?.data?.error;
       if (meta?.code !== 110 && !/invalid user id/i.test(meta?.message || '')) {
         console.error('❌ InstagramService._lookupAccount xatolik:', meta?.message || error.message);
@@ -469,14 +426,10 @@ export class InstagramService {
     return value;
   }
 
-  /**
-   * Biz bilan aloqada bo'lgan akkauntlar — 15 daqiqada bir yig'iladi
-   * (har harf uchun o'nlab API so'rovi ketmasligi uchun).
-   */
   async _knownAccounts() {
     if (this._known && Date.now() - this._known.at < 15 * 60 * 1000) return this._known.list;
 
-    const found = new Map(); // username -> source
+    const found = new Map();
     const add = (username, source) => {
       const u = String(username || '').toLowerCase();
       if (u && !found.has(u)) found.set(u, source);
@@ -488,15 +441,12 @@ export class InstagramService {
     const media = data.data || [];
 
     await Promise.all([
-      // Avvalgi hammualliflar
       ...media.map((m) => this.api.get(`/${m.id}/collaborators`)
         .then((r) => (r.data.data || []).forEach((c) => add(c.username, 'collab')))
         .catch(() => { })),
-      // Bizga collab taklif yuborganlar
       this.api.get(`/${this.businessAccountId}/collaboration_invites`, { params: { fields: 'media_owner_username', limit: 50 } })
         .then((r) => (r.data.data || []).forEach((i) => add(i.media_owner_username, 'invite')))
         .catch(() => { }),
-      // Izoh yozganlar
       ...media.filter((m) => m.comments_count > 0).slice(0, 8).map((m) =>
         this.api.get(`/${m.id}/comments`, { params: { fields: 'username', limit: 50 } })
           .then((r) => (r.data.data || []).forEach((c) => add(c.username, 'comment')))
@@ -515,7 +465,6 @@ export class InstagramService {
     return this._me;
   }
 
-  /** Meta'ning aniq sababi bilan 502 — admin nega bo'lmaganini ko'rishi kerak */
   _metaError(methodName, error, fallback) {
     const meta = error.response?.data?.error;
     console.error(`❌ InstagramService.${methodName} xatolik:`, error.response?.data || error.message);
@@ -524,7 +473,9 @@ export class InstagramService {
   }
 
   async uploadReels(videoUrl, caption) {
-    // Eski reels yuklash funksiyasi
+    const target = this._resolveTarget();
+    if (target !== this) return target.uploadReels(videoUrl, caption);
+
     try {
       const containerResponse = await this.api.post(`/${this.businessAccountId}/media`, null, {
         params: { media_type: 'REELS', video_url: videoUrl, caption: caption }
@@ -542,14 +493,6 @@ export class InstagramService {
     }
   }
 
-  /**
-   * Media konteyneri yaratadi va uning id sini qaytaradi.
-   *
-   * Video (lokal fayl bo'lsa) — "resumable" usulda: fayl baytlari
-   * rupload.facebook.com ga to'g'ridan-to'g'ri yuboriladi. Ilgari Meta faylni
-   * bizning /public/uploads dan o'zi tortardi — bu navbatda 6-10 soniya
-   * kutish degani edi. Rasm uchun Meta faqat image_url qabul qiladi.
-   */
   async _createContainer(params, mediaType, mediaUrl, filePath) {
     if (mediaType !== 'VIDEO') {
       const { data } = await this.api.post(`/${this.businessAccountId}/media`, null, {
@@ -583,15 +526,6 @@ export class InstagramService {
     return data.id;
   }
 
-  /**
-   * Konteyner tayyor bo'lguncha kutish — tez-tez so'rab, keyin siyraklashib.
-   *
-   * Ilgari qat'iy 6 soniyada bir so'ralardi: Instagram 1-soniyada tayyor
-   * bo'lsa ham 6 soniya bekorga kutilardi. Endi 0.5s dan boshlanib 3s gacha
-   * o'sadi — tez tayyorlanganda darhol, uzoq ishlanganda esa API ni
-   * ortiqcha so'rovlar bilan to'ldirmasdan kutadi.
-   * Qaytaradi: nechta tekshiruv bo'lgani (log uchun).
-   */
   async _waitUntilFinished(containerId, timeoutMs = 300000) {
     const started = Date.now();
     let delay = 500;
@@ -620,7 +554,49 @@ export class InstagramService {
   }
 
   _handleError(methodName, error) {
+    if (error?.notConfigured || error?.status === 404) throw error;
     console.error(`❌ InstagramService.${methodName} xatolik:`, error.response?.data || error.message);
-    throw new Error(`Instagram integratsiyasida xatolik yuz berdi.`);
+    const meta = error.response?.data?.error;
+    const msg = meta?.error_user_msg || meta?.message || `Instagram integratsiyasida xatolik yuz berdi.`;
+    throw Object.assign(new Error(msg), { status: error.response?.status || 500 });
   }
 }
+
+const serviceInstances = new Map();
+
+export const getInstagramService = (explicitTenant = null) => {
+  const tenant = explicitTenant || currentTenant() || getDefaultTenant();
+  if (!tenant) {
+    throw Object.assign(new Error("Bot aniqlanmadi"), { status: 400 });
+  }
+
+  const ig = tenant.instagram;
+  const accessToken = ig?.accessToken || (tenant.slot === 1 ? CONFIG.INSTAGRAM_ACCESS_TOKEN : null);
+  const businessAccountId = ig?.id || (tenant.slot === 1 ? CONFIG.INSTAGRAM_ID : null);
+
+  if (!accessToken || !businessAccountId) {
+    const error = new Error("Bu bot uchun instagram tokenlari olinmagan");
+    error.status = 404;
+    error.notConfigured = true;
+    throw error;
+  }
+
+  const key = String(tenant.botId);
+  let service = serviceInstances.get(key);
+  if (!service || service.accessToken !== accessToken || service.businessAccountId !== businessAccountId) {
+    service = new InstagramService({ accessToken, businessAccountId });
+    serviceInstances.set(key, service);
+  }
+  return service;
+};
+
+export const instagramService = new Proxy(new InstagramService(), {
+  get(target, prop) {
+    const inst = getInstagramService();
+    const val = inst[prop];
+    if (typeof val === 'function') {
+      return val.bind(inst);
+    }
+    return val;
+  }
+});

@@ -171,7 +171,6 @@ app.use("/api/admin", adminRouter)
 // mijozlar buzilmasin).
 app.use("/api/logs", logsRouter)
 app.use("/api/log", logsRouter)
-app.use("/api/instagram", instagramRouter)
 // Reklama tarqatish ATAYLAB tenant middleware dan OLDIN: bitta tarqatma
 // bir nechta botning foydalanuvchilarini qamraydi.
 app.use("/api/broadcast", broadcastRouter)
@@ -191,6 +190,7 @@ app.use("/api/channel", channelRouter)
 app.use("/api/bot", botRouter)
 app.use("/api/user", userRouter)
 app.use("/api/statistics", statisticsRouter)
+app.use("/api/instagram", instagramRouter)
 
 app.get("/health", (req, res) => res.json({ success: true, status: "ok" }))
 
@@ -234,7 +234,8 @@ app.use((err, req, res, next) => {
     res.status(status).json({
         success: false,
         // Ichki xato matnlari (Mongoose/Telegram) mijozga chiqarilmaydi
-        message: status >= 500 ? "Serverda kutilmagan xatolik yuz berdi" : message
+        message: status >= 500 ? "Serverda kutilmagan xatolik yuz berdi" : message,
+        notConfigured: Boolean(err.notConfigured),
     })
 })
 

@@ -85,6 +85,11 @@ const parseBots = () => {
             }
         }
 
+        const instagramId = process.env[`BOT${i}_INSTAGRAM_ID`] || (i === 1 ? process.env.INSTAGRAM_ID : null);
+        const instagramAccessToken = process.env[`BOT${i}_INSTAGRAM_ACCESS_TOKEN`] || (i === 1 ? process.env.INSTAGRAM_ACCESS_TOKEN : null);
+        const metaAppId = process.env[`BOT${i}_META_APP_ID`] || process.env.META_APP_ID;
+        const metaAppSecret = process.env[`BOT${i}_META_APP_SECRET`] || process.env.META_APP_SECRET;
+
         bots.push({
             // Slot raqami — contentFrom shu raqamlarga murojaat qiladi
             slot: i,
@@ -98,6 +103,12 @@ const parseBots = () => {
             contentDb: process.env[`BOT${i}_CONTENT_DB`] || DEFAULT_DB,
             dataDb: process.env[`BOT${i}_DATA_DB`] || DEFAULT_DB,
             channelId,
+            instagram: {
+                id: instagramId || null,
+                accessToken: instagramAccessToken || null,
+                metaAppId: metaAppId || null,
+                metaAppSecret: metaAppSecret || null,
+            },
         });
     }
 
