@@ -384,10 +384,11 @@ export class InstagramService {
       throw Object.assign(new Error("Noto'g'ri media ID"), { status: 400 });
     }
     try {
-      const { data } = await this.api.post(`/${mediaId}/collaborators`, null, {
-        params: { accept: Boolean(accept) }
+      const { data } = await this.api.post(`/${this.businessAccountId}/collaboration_invites`, {
+        media_id: mediaId,
+        accept: Boolean(accept),
       });
-      return { success: data.success !== false, mediaId, accept };
+      return { success: data?.success !== false, mediaId, accept };
     } catch (error) {
       this._metaError('respondCollabInvite', error, "Taklifga javob berib bo'lmadi");
     }
@@ -404,7 +405,8 @@ export class InstagramService {
       const { data } = await this.api.get(`/${mediaId}/collaborators`);
       return (data.data || []).map((c) => ({
         username: c.username,
-        status: c.status || 'PENDING',
+        status: (c.invite_status || c.status || 'PENDING').toUpperCase(),
+        inviteStatus: c.invite_status,
       }));
     } catch (error) {
       this._handleError('getCollaborators', error);
