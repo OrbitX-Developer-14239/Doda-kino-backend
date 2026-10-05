@@ -472,7 +472,9 @@ export const AdminService = {
                 io.to(`auth_${authSessionToken}`).emit("auth_success", {
                     success: true,
                     data: {
+                        loginToken: token,
                         accessToken,
+                        refreshToken,
                         user: { id: admin._id, username: admin.username, role: admin.role }
                     }
                 });
@@ -544,7 +546,7 @@ export const AdminService = {
             if (!known) throw new Error();
 
             const { accessToken: newAccessToken } = issueTokens(admin);
-            return { accessToken: newAccessToken };
+            return { accessToken: newAccessToken, refreshToken: token };
         } catch (error) {
             throw Object.assign(new Error("Refresh token yaroqsiz yoki eskirgan"), { status: 403 });
         }

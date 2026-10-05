@@ -4,8 +4,12 @@ import { CONFIG } from "../config/index.js";
 
 /** HttpOnly cookie dagi refresh token */
 const readRefreshCookie = (req) => {
-    const match = (req.headers.cookie || "").match(/refreshToken=([^;]+)/);
-    return match ? match[1] : null;
+    const fromBody = req.body?.refreshToken || req.headers["x-refresh-token"];
+    if (fromBody && typeof fromBody === "string" && fromBody.trim()) {
+        return fromBody.trim();
+    }
+    const match = (req.headers.cookie || "").match(/(?:^|;\s*)refreshToken=([^;]+)/);
+    return match ? decodeURIComponent(match[1].trim()) : null;
 };
 
 export const AdminController = {
@@ -23,8 +27,6 @@ export const AdminController = {
             path: "/api/admin",
             maxAge: 15 * 24 * 60 * 60 * 1000
         });
-
-        delete data.refreshToken;
 
         res.status(200).json({ success: true, data });
     }),
@@ -113,8 +115,6 @@ export const AdminController = {
             maxAge: 15 * 24 * 60 * 60 * 1000
         });
 
-        delete data.refreshToken;
-
         res.status(200).json({ success: true, data });
     }),
 
@@ -132,6 +132,18 @@ export const AdminController = {
         const refreshToken = readRefreshCookie(req);
 
         const data = await AdminService.refresh(refreshToken);
+
+        const activeRefreshToken = data.refreshToken || refreshToken;
+        if (activeRefreshToken) {
+            res.cookie('refreshToken', activeRefreshToken, {
+                httpOnly: true,
+                secure: CONFIG.IS_PRODUCTION,
+                sameSite: CONFIG.IS_PRODUCTION ? "none" : "lax",
+                path: "/api/admin",
+                maxAge: 15 * 24 * 60 * 60 * 1000
+            });
+        }
+
         res.status(200).json({ success: true, data });
     }),
 
@@ -139,7 +151,11 @@ export const AdminController = {
         // Faqat SHU brauzerning sessiyasi yopiladi — boshqa qurilmadagi
         // ochiq panel ishlashda davom etsin
         const refreshToken = readRefreshCookie(req);
-        res.clearCookie('refreshToken', { path: '/api/admin' });
+        res.clearCookie('refreshToken', {
+            path: '/api/admin',
+            secure: CONFIG.IS_PRODUCTION,
+            sameSite: CONFIG.IS_PRODUCTION ? "none" : "lax"
+        });
         const data = await AdminService.logout(req.admin._id, refreshToken);
         res.status(200).json({ success: true, data }); 
     }),
