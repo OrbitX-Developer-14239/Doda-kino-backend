@@ -184,6 +184,7 @@ app.use("/api/broadcast", broadcastRouter)
 // oddiy /film, /episode ... ko'rinishini ko'radi.
 app.use("/api", tenantMiddleware)
 
+app.use("/api/admin", adminRouter)
 app.use("/api/film", filmsRouter)
 app.use("/api/episode", episodesRouter)
 app.use("/api/channel", channelRouter)
