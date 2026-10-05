@@ -143,4 +143,28 @@ export const InstagramController = {
         const data = await instagramService.getCollaborators(req.params.id);
         res.status(200).json({ success: true, data });
     }),
+    getComments: catchAsync(async (req, res) => {
+        const { limit, after } = req.query;
+        const data = await instagramService.getComments(req.params.id, { limit, after });
+        res.status(200).json({ success: true, data });
+    }),
+
+    postComment: catchAsync(async (req, res) => {
+        const { message } = req.body || {};
+        if (!message || !message.trim()) {
+            throw Object.assign(new Error("Izoh matni bo'sh bo'lishi mumkin emas"), { status: 400 });
+        }
+        const data = await instagramService.postComment(req.params.id, message.trim());
+        res.status(201).json({ success: true, data });
+    }),
+
+    likeMedia: catchAsync(async (req, res) => {
+        const data = await instagramService.likeMedia(req.params.id);
+        res.status(200).json({ success: true, data });
+    }),
+
+    unlikeMedia: catchAsync(async (req, res) => {
+        const data = await instagramService.unlikeMedia(req.params.id);
+        res.status(200).json({ success: true, data });
+    }),
 };

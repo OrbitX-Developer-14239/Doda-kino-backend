@@ -589,6 +589,84 @@ export class InstagramService {
     throw new Error('Timeout meta api.');
   }
 
+  async getComments(mediaId, options = {}) {
+    const target = this._resolveTarget();
+    if (target !== this) return target.getComments(mediaId, options);
+
+    try {
+      const limit = Math.min(Math.max(Number(options.limit) || 30, 1), 50);
+      const params = {
+        fields: 'id,text,timestamp,username,like_count',
+        limit,
+      };
+      if (options.after) params.after = options.after;
+
+      const { data } = await this.api.get(`/${mediaId}/comments`, { params });
+      const comments = (data?.data || []).map((c) => ({
+        id: c.id,
+        text: c.text,
+        timestamp: c.timestamp,
+        date: new Date(c.timestamp).toLocaleDateString(),
+        username: c.username,
+        likeCount: c.like_count || 0,
+      }));
+
+      // Eng oxirgi (yangi) commentlar tepada tursin
+      comments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      return {
+        comments,
+        nextCursor: data?.paging?.cursors?.after || null,
+        hasMore: Boolean(data?.paging?.next),
+        paging: data?.paging,
+      };
+    } catch (error) {
+      this._handleError('getComments', error);
+    }
+  }
+
+  async postComment(mediaId, message) {
+    const target = this._resolveTarget();
+    if (target !== this) return target.postComment(mediaId, message);
+
+    try {
+      const { data } = await this.api.post(`/${mediaId}/comments`, { message });
+      return {
+        id: data.id,
+        text: message,
+        timestamp: new Date().toISOString(),
+        username: this._me?.username || 'me',
+        likeCount: 0,
+      };
+    } catch (error) {
+      this._handleError('postComment', error);
+    }
+  }
+
+  async likeMedia(mediaId) {
+    const target = this._resolveTarget();
+    if (target !== this) return target.likeMedia(mediaId);
+
+    try {
+      const { data } = await this.api.post(`/${this.businessAccountId}/likes`, { media_id: mediaId });
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.response?.data?.error?.message || error.message };
+    }
+  }
+
+  async unlikeMedia(mediaId) {
+    const target = this._resolveTarget();
+    if (target !== this) return target.unlikeMedia(mediaId);
+
+    try {
+      const { data } = await this.api.delete(`/${this.businessAccountId}/likes`, { data: { media_id: mediaId } });
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.response?.data?.error?.message || error.message };
+    }
+  }
+
   _handleError(methodName, error) {
     if (error?.notConfigured || error?.status === 404) throw error;
     console.error(`❌ InstagramService.${methodName} xatolik:`, error.response?.data || error.message);
@@ -627,11 +705,13 @@ export const getInstagramService = (explicitTenant = null) => {
 };
 
 export const instagramService = new Proxy(new InstagramService(), {
-  get(target, prop) {
-    const inst = getInstagramService();
-    const val = inst[prop];
+  get(target, prop, receiver) {
+    const val = Reflect.get(target, prop, receiver);
     if (typeof val === 'function') {
-      return val.bind(inst);
+      return function (...args) {
+        const resolved = target._resolveTarget();
+        return resolved[prop].apply(resolved, args);
+      };
     }
     return val;
   }

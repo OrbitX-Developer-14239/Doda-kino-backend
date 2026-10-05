@@ -230,4 +230,9 @@ router.get("/media/:id/collaborators", authMiddleware(["superadmin", "admin"]), 
  */
 router.get("/accounts/search", authMiddleware(["superadmin", "admin"]), InstagramController.searchAccounts);
 
+router.get("/media/:id/comments", authMiddleware(["superadmin", "admin"]), InstagramController.getComments);
+router.post("/media/:id/comments", authMiddleware(["superadmin", "admin"]), InstagramController.postComment);
+router.post("/media/:id/likes", authMiddleware(["superadmin", "admin"]), InstagramController.likeMedia);
+router.delete("/media/:id/likes", authMiddleware(["superadmin", "admin"]), InstagramController.unlikeMedia);
+
 export default router;
