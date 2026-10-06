@@ -326,7 +326,7 @@ export class InstagramService {
 
     try {
       const { data } = await this.api.get(`/${this.businessAccountId}/collaboration_invites`, {
-        params: { limit: 20 }
+        params: { fields: 'id,media_id,media_owner_username', limit: 20 }
       });
       const rawList = data?.data || [];
 
@@ -372,7 +372,8 @@ export class InstagramService {
 
       return invites;
     } catch (error) {
-      this._handleError('getCollabInvites', error);
+      console.warn("⚠️ getCollabInvites xatolik:", error.response?.data || error.message);
+      return [];
     }
   }
 
