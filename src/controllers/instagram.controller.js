@@ -109,7 +109,8 @@ export const InstagramController = {
             const mediaType = req.file.mimetype.startsWith('video/') ? 'VIDEO' : 'IMAGE';
             const fileUrl = `${CONFIG.SERVER_URL || `${req.protocol}://${req.get('host')}`}/public/uploads/${req.file.filename}`;
 
-            const data = await instagramService.uploadPost(fileUrl, mediaType, caption, req.file.path, collaborators);
+            const thumbOffset = req.body?.thumb_offset ? Number(req.body.thumb_offset) : null;
+            const data = await instagramService.uploadPost(fileUrl, mediaType, caption, req.file.path, collaborators, thumbOffset);
             res.status(201).json({ success: true, message: "Post joylandi!", data: { ...data, collaborators } });
         } finally {
             // Meta faylni tortib bo'ldi (yoki rad etdi) — serverda saqlanmaydi

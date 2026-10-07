@@ -289,15 +289,18 @@ export class InstagramService {
     }
   }
 
-  async uploadPost(mediaUrl, mediaType = 'IMAGE', caption = '', filePath = null, collaborators = []) {
+  async uploadPost(mediaUrl, mediaType = 'IMAGE', caption = '', filePath = null, collaborators = [], thumbOffset = null) {
     const target = this._resolveTarget();
-    if (target !== this) return target.uploadPost(mediaUrl, mediaType, caption, filePath, collaborators);
+    if (target !== this) return target.uploadPost(mediaUrl, mediaType, caption, filePath, collaborators, thumbOffset);
 
     try {
       const params = mediaType === 'VIDEO' ? { media_type: 'REELS', share_to_feed: true } : {};
       if (caption) params.caption = caption;
       if (collaborators.length) {
         params.collaborators = JSON.stringify(collaborators);
+      }
+      if (thumbOffset != null && !isNaN(thumbOffset)) {
+        params.thumb_offset = thumbOffset;
       }
 
       const containerId = await this._createContainer(params, mediaType, mediaUrl, filePath);
